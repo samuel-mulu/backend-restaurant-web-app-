@@ -1,0 +1,37 @@
+{
+  "name": "restuarant_backend",
+  "version": "1.0.0",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.8.0",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "joi": "^18.0.2",
+    "mongoose": "^8.20.0",
+    "multer": "^2.0.2",
+    "socket.io": "^4.8.1",
+    "streamifier": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/http-errors": "^2.0.5",
+    "@types/multer": "^2.0.0"
+  }
+}

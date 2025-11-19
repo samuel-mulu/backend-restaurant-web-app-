@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "es2020" /* Modern JS output */,
+    "module": "commonjs" /* Stick with CommonJS for Node/Express */,
+    "rootDir": "./src" /* Source folder */,
+    "outDir": "./dist" /* Output folder */,
+    "moduleResolution": "node" /* Standard resolution */,
+    "resolveJsonModule": true /* Allow importing JSON */,
+    "esModuleInterop": true /* Enables default import compatibility */,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true /* Recommended for better type-safety */,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
