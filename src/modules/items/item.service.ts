@@ -16,11 +16,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
  * Custom error class for item operations
  */
 export class ItemServiceError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public code?: string
-  ) {
+  constructor(public status: number, message: string, public code?: string) {
     super(message);
     this.name = "ItemServiceError";
     Object.setPrototypeOf(this, ItemServiceError.prototype);
@@ -115,7 +111,9 @@ const validateImageFiles = (files: Express.Multer.File[]): void => {
       const maxSizeMB = MAX_IMAGE_SIZE / 1024 / 1024;
       throw new ItemServiceError(
         400,
-        `Image "${file.originalname || "unknown"}" exceeds maximum size of ${maxSizeMB}MB`,
+        `Image "${
+          file.originalname || "unknown"
+        }" exceeds maximum size of ${maxSizeMB}MB`,
         "IMAGE_SIZE_EXCEEDED"
       );
     }
@@ -225,7 +223,11 @@ export const createItem = async (
     session || null
   );
   if (existingItem) {
-    throw new ItemServiceError(409, "Item code already exists", "DUPLICATE_ITEM_CODE");
+    throw new ItemServiceError(
+      409,
+      "Item code already exists",
+      "DUPLICATE_ITEM_CODE"
+    );
   }
 
   // Check if SKU already exists (if provided)
@@ -329,7 +331,11 @@ export const listItems = async (
   }
   if (filters.categoryId) {
     if (!Types.ObjectId.isValid(filters.categoryId)) {
-      throw new ItemServiceError(400, "Invalid category ID", "INVALID_CATEGORY_ID");
+      throw new ItemServiceError(
+        400,
+        "Invalid category ID",
+        "INVALID_CATEGORY_ID"
+      );
     }
     query.categoryId = new Types.ObjectId(filters.categoryId);
   }
@@ -337,10 +343,7 @@ export const listItems = async (
     delete query.isDeleted;
   }
 
-  return await Item.find(query)
-    .populate("category")
-    .sort({ name: 1 })
-    .lean();
+  return await Item.find(query).populate("category").sort({ name: 1 }).lean();
 };
 
 /**
@@ -430,7 +433,11 @@ export const updateItem = async (
           _id: { $ne: id },
         }).session(dbSession);
         if (existingSku) {
-          throw { status: 409, message: "SKU already exists" };
+          throw new ItemServiceError(
+            409,
+            "SKU already exists",
+            "DUPLICATE_SKU"
+          );
         }
       }
     }
@@ -443,7 +450,11 @@ export const updateItem = async (
       oldItem.productType === "inventory"
     ) {
       if (data.stock !== undefined && data.stock < 0) {
-        throw { status: 400, message: "Stock cannot be negative" };
+        throw new ItemServiceError(
+          400,
+          "Stock cannot be negative",
+          "INVALID_STOCK"
+        );
       }
     }
 
@@ -484,11 +495,11 @@ export const updateItem = async (
     ).populate("category");
 
     if (!updated) {
-      throw {
-        status: 409,
-        message:
-          "Item has been modified by another user. Please refresh and try again.",
-      };
+      throw new ItemServiceError(
+        409,
+        "Item has been modified by another user. Please refresh and try again.",
+        "VERSION_CONFLICT"
+      );
     }
 
     if (!session) {
@@ -512,16 +523,24 @@ export const updateItem = async (
       await dbSession.abortTransaction();
     }
     // Clean up uploaded images on error
-    if (uploadedImages.length > 0) {
-      await Promise.all(
-        uploadedImages.map((img) =>
+    if (uploadedImages && uploadedImages.length > 0) {
+      await Promise.allSettled(
+        uploadedImages.map((img: ImageInfo) =>
           deleteImage(img.publicId).catch((err) =>
             console.error(`Failed to cleanup image ${img.publicId}:`, err)
           )
         )
       );
     }
-    throw error;
+    // Re-throw as ItemServiceError if not already
+    if (error instanceof ItemServiceError) {
+      throw error;
+    }
+    throw new ItemServiceError(
+      error.status || 500,
+      error.message || "Failed to update item",
+      error.code
+    );
   } finally {
     if (!session) {
       dbSession.endSession();
@@ -529,21 +548,34 @@ export const updateItem = async (
   }
 };
 
+/**
+ * Atomically updates item stock with operation support
+ * @param id - Item ID
+ * @param data - Stock update data with operation type
+ * @param session - Optional MongoDB session
+ * @returns Updated item with populated category
+ * @throws {ItemServiceError} If validation fails
+ */
 export const updateStock = async (
   id: string,
   data: UpdateStockInput,
   session?: ClientSession
 ): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
   const item = await Item.findById(id).session(session || null);
   if (!item || item.isDeleted) {
-    throw { status: 404, message: "Item not found" };
+    throw new ItemServiceError(404, "Item not found", "ITEM_NOT_FOUND");
   }
 
   if (item.productType !== "inventory") {
-    throw {
-      status: 400,
-      message: "Stock can only be updated for inventory items",
-    };
+    throw new ItemServiceError(
+      400,
+      "Stock can only be updated for inventory items",
+      "INVALID_PRODUCT_TYPE"
+    );
   }
 
   let newStock: number;
@@ -560,49 +592,81 @@ export const updateStock = async (
       newStock = (item.stock || 0) - data.stock;
       break;
     default:
-      throw {
-        status: 400,
-        message: "Invalid operation. Use 'set', 'increment', or 'decrement'",
-      };
+      throw new ItemServiceError(
+        400,
+        "Invalid operation. Use 'set', 'increment', or 'decrement'",
+        "INVALID_OPERATION"
+      );
   }
 
   if (newStock < 0) {
-    throw { status: 400, message: "Stock cannot be negative" };
+    throw new ItemServiceError(
+      400,
+      "Stock cannot be negative",
+      "INVALID_STOCK"
+    );
   }
 
   const updated = await Item.findByIdAndUpdate(
     id,
     { stock: newStock },
     { new: true, runValidators: true, session: session || undefined }
-  ).populate("categoryId", "name type");
+  ).populate("category");
 
   return updated;
 };
 
+/**
+ * Soft deletes an item
+ * @param id - Item ID
+ * @returns Deleted item with populated category
+ */
 export const deleteItem = async (id: string): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
   const item = await Item.findByIdAndUpdate(
     id,
     { isDeleted: true, deletedAt: new Date(), isAvailable: false },
     { new: true, runValidators: true }
-  ).populate("categoryId", "name type");
+  ).populate("category");
 
   return item;
 };
 
+/**
+ * Restores a soft-deleted item
+ * @param id - Item ID
+ * @returns Restored item with populated category
+ */
 export const restoreItem = async (id: string): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
   const item = await Item.findByIdAndUpdate(
     id,
     { isDeleted: false, deletedAt: null, isAvailable: true },
     { new: true, runValidators: true }
-  ).populate("categoryId", "name type");
+  ).populate("category");
 
   return item;
 };
 
+/**
+ * Permanently deletes an item and its images
+ * @param id - Item ID
+ * @throws {ItemServiceError} If item not found
+ */
 export const permanentDeleteItem = async (id: string): Promise<void> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
   const item = await Item.findById(id);
   if (!item) {
-    throw { status: 404, message: "Item not found" };
+    throw new ItemServiceError(404, "Item not found", "ITEM_NOT_FOUND");
   }
 
   // Delete images first
@@ -619,30 +683,48 @@ export const permanentDeleteItem = async (id: string): Promise<void> => {
   await Item.findByIdAndDelete(id);
 };
 
+/**
+ * Gets all soft-deleted items
+ * @returns Array of deleted items with populated categories
+ */
 export const getDeletedItems = async (): Promise<any[]> => {
   return await Item.find({ isDeleted: true })
-    .populate("categoryId", "name type")
+    .populate("category")
     .sort({ deletedAt: -1 })
     .lean();
 };
 
+/**
+ * Gets all unavailable items
+ * @returns Array of unavailable items with populated categories
+ */
 export const getUnavailableItems = async (): Promise<any[]> => {
   return await Item.find({
     isAvailable: false,
     isDeleted: false,
   })
-    .populate("categoryId", "name type")
+    .populate("category")
     .sort({ name: 1 })
     .lean();
 };
 
+/**
+ * Updates item availability status
+ * @param id - Item ID
+ * @param isAvailable - New availability status
+ * @returns Updated item with populated category
+ */
 export const updateAvailability = async (
   id: string,
   isAvailable: boolean
 ): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
   return await Item.findOneAndUpdate(
     { _id: id, isDeleted: false },
     { isAvailable },
     { new: true, runValidators: true }
-  ).populate("categoryId", "name type");
+  ).populate("category");
 };
