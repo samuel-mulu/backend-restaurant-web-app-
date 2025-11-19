@@ -358,6 +358,16 @@ export const getItemById = async (id: string): Promise<any | null> => {
     .lean();
 };
 
+/**
+ * Updates an item with transaction support and optimistic concurrency control
+ * @param id - Item ID
+ * @param data - Update data
+ * @param files - Optional new image files
+ * @param imagesToKeep - Array of publicIds for images to keep
+ * @param session - Optional MongoDB session
+ * @returns Updated item with populated category
+ * @throws {ItemServiceError} If validation fails or conflict detected
+ */
 export const updateItem = async (
   id: string,
   data: UpdateItemInput & { __v?: number },
@@ -365,6 +375,10 @@ export const updateItem = async (
   imagesToKeep: string[] = [],
   session?: ClientSession
 ): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
   const dbSession = session || (await mongoose.startSession());
   let uploadedImages: ImageInfo[] = [];
 
@@ -376,16 +390,16 @@ export const updateItem = async (
     // Get existing item
     const oldItem = await Item.findById(id).session(dbSession);
     if (!oldItem || oldItem.isDeleted) {
-      throw { status: 404, message: "Item not found" };
+      throw new ItemServiceError(404, "Item not found", "ITEM_NOT_FOUND");
     }
 
     // Optimistic concurrency control
     if (data.__v !== undefined && oldItem.__v !== data.__v) {
-      throw {
-        status: 409,
-        message:
-          "Item has been modified by another user. Please refresh and try again.",
-      };
+      throw new ItemServiceError(
+        409,
+        "Item has been modified by another user. Please refresh and try again.",
+        "VERSION_CONFLICT"
+      );
     }
 
     // Normalize itemCode and SKU if provided
@@ -398,7 +412,11 @@ export const updateItem = async (
           _id: { $ne: id },
         }).session(dbSession);
         if (existingItem) {
-          throw { status: 409, message: "Item code already exists" };
+          throw new ItemServiceError(
+            409,
+            "Item code already exists",
+            "DUPLICATE_ITEM_CODE"
+          );
         }
       }
     }
