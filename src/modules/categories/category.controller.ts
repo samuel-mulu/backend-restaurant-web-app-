@@ -74,13 +74,11 @@ export const create = async (
 };
 
 /**
- * Lists all categories, optionally filtered by type
+ * Lists all categories
  */
 export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const categories = await categoryService.listCategories(
-      req.query.type as any
-    );
+    const categories = await categoryService.listCategories();
     res.json({
       success: true,
       data: categories,

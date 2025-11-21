@@ -287,12 +287,16 @@ export const updateItem = async (
 
     // Normalize itemCode if provided
     if (data.itemCode) {
-      data.itemCode = normalizeItemCode(data.itemCode);
+      const normalizedItemCode = normalizeItemCode(data.itemCode);
       // Check if itemCode is being changed and if it already exists
-      if (data.itemCode !== oldItem.itemCode) {
+      // Always exclude the current item from the duplicate check
+      const normalizedOldItemCode = normalizeItemCode(oldItem.itemCode);
+
+      if (normalizedItemCode !== normalizedOldItemCode) {
         const existingItem = await Item.findOne({
-          itemCode: data.itemCode,
+          itemCode: normalizedItemCode,
           _id: { $ne: id },
+          isDeleted: { $ne: true }, // Also exclude deleted items
         }).session(session || null);
         if (existingItem) {
           throw new ItemServiceError(
@@ -302,6 +306,8 @@ export const updateItem = async (
           );
         }
       }
+      // Assign normalized value
+      data.itemCode = normalizedItemCode;
     }
 
     // Handle image: if new image is uploaded, delete old one

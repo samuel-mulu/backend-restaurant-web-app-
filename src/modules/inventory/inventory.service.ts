@@ -38,7 +38,7 @@ export const listInventory = async (filters: ListInventoryFilters = {}) => {
     const lowStockItems = await Inventory.find({
       $expr: { $lt: ["$quantity", { $ifNull: ["$minThreshold", 0] }] },
     })
-      .populate("categoryId", "name type")
+      .populate("categoryId", "name")
       .sort({ quantity: 1 })
       .lean();
 

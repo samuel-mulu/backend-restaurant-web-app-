@@ -6,17 +6,15 @@ import { Inventory } from "../modules/inventory/inventory.model";
 
 // Sample data
 const categories = [
-  // Food categories
-  { type: "food" as const, name: "Appetizers", isActive: true },
-  { type: "food" as const, name: "Main Courses", isActive: true },
-  { type: "food" as const, name: "Desserts", isActive: true },
-  { type: "food" as const, name: "Salads", isActive: true },
-  { type: "food" as const, name: "Pizza", isActive: true },
-  // Beverage categories
-  { type: "beverage" as const, name: "Soft Drinks", isActive: true },
-  { type: "beverage" as const, name: "Coffee", isActive: true },
-  { type: "beverage" as const, name: "Tea", isActive: true },
-  { type: "beverage" as const, name: "Juices", isActive: true },
+  { name: "Appetizers" },
+  { name: "Main Courses" },
+  { name: "Desserts" },
+  { name: "Salads" },
+  { name: "Pizza" },
+  { name: "Soft Drinks" },
+  { name: "Coffee" },
+  { name: "Tea" },
+  { name: "Juices" },
 ];
 
 const menuItems = [
@@ -189,15 +187,12 @@ async function seedDatabase() {
     // Create a map of category names to IDs
     const categoryMap: { [key: string]: string } = {};
     createdCategories.forEach((cat) => {
-      const key =
-        cat.type === "food" ? `food-${cat.name}` : `beverage-${cat.name}`;
-      categoryMap[key] = cat._id.toString();
+      categoryMap[cat.name] = cat._id.toString();
     });
 
-    // Helper function to get category ID by type and name
-    const getCategoryId = (type: "food" | "beverage", name: string): string => {
-      const key = `${type}-${name}`;
-      return categoryMap[key];
+    // Helper function to get category ID by name
+    const getCategoryId = (name: string): string => {
+      return categoryMap[name];
     };
 
     // Seed Menu Items
@@ -205,15 +200,15 @@ async function seedDatabase() {
     const menuItemsWithCategories = menuItems.map((item, index) => {
       let categoryId = "";
       if (item.itemCode.startsWith("APP")) {
-        categoryId = getCategoryId("food", "Appetizers");
+        categoryId = getCategoryId("Appetizers");
       } else if (item.itemCode.startsWith("MAIN")) {
-        categoryId = getCategoryId("food", "Main Courses");
+        categoryId = getCategoryId("Main Courses");
       } else if (item.itemCode.startsWith("SAL")) {
-        categoryId = getCategoryId("food", "Salads");
+        categoryId = getCategoryId("Salads");
       } else if (item.itemCode.startsWith("PIZ")) {
-        categoryId = getCategoryId("food", "Pizza");
+        categoryId = getCategoryId("Pizza");
       } else if (item.itemCode.startsWith("DES")) {
-        categoryId = getCategoryId("food", "Desserts");
+        categoryId = getCategoryId("Desserts");
       }
       return { ...item, categoryId };
     });
@@ -225,7 +220,7 @@ async function seedDatabase() {
     console.log("📊 Seeding inventory records...");
     const inventoryItemsWithCategories = inventoryItems.map((item) => {
       // Use Main Courses category for inventory items
-      const categoryId = getCategoryId("food", "Main Courses");
+      const categoryId = getCategoryId("Main Courses");
       return {
         ...item,
         categoryId: categoryId

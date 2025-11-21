@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { Category, CategoryDoc, CategoryType } from "./category.model";
+import { Category, CategoryDoc } from "./category.model";
 
 /**
  * Custom error class for category operations
@@ -19,31 +19,27 @@ export class CategoryServiceError extends Error {
  * @throws {CategoryServiceError} If validation fails or category already exists
  */
 export const createCategory = async (data: {
-  type: CategoryType;
   name: string;
 }): Promise<CategoryDoc> => {
   // Normalize name
   const name = data.name.trim();
 
-  // Check if category with same type and name already exists
+  // Check if category with same name already exists
   const existing = await Category.findOne({
-    type: data.type,
     name: { $regex: new RegExp(`^${name}$`, "i") },
   });
 
   if (existing) {
     throw new CategoryServiceError(
       409,
-      `Category "${name}" already exists for type "${data.type}"`,
+      `Category "${name}" already exists`,
       "DUPLICATE_CATEGORY"
     );
   }
 
   try {
     const category = await Category.create({
-      type: data.type,
       name,
-      isActive: true,
     });
     return category;
   } catch (error: any) {
@@ -51,7 +47,7 @@ export const createCategory = async (data: {
     if (error.code === 11000) {
       throw new CategoryServiceError(
         409,
-        `Category "${name}" already exists for type "${data.type}"`,
+        `Category "${name}" already exists`,
         "DUPLICATE_CATEGORY"
       );
     }
@@ -76,18 +72,11 @@ export const createCategory = async (data: {
 };
 
 /**
- * Lists all active categories, optionally filtered by type
- * @param type - Optional category type filter
+ * Lists all categories
  * @returns Array of categories
  */
-export const listCategories = async (
-  type?: CategoryType
-): Promise<CategoryDoc[]> => {
-  const q: any = { isActive: true };
-  if (type) {
-    q.type = type;
-  }
-  return await Category.find(q).sort({ name: 1 });
+export const listCategories = async (): Promise<CategoryDoc[]> => {
+  return await Category.find().sort({ name: 1 });
 };
 
 /**
@@ -103,7 +92,7 @@ export const listCategories = async (
 
 export const updateCategory = async (
   id: string,
-  data: Partial<Pick<CategoryDoc, "name" | "isActive">>
+  data: Partial<Pick<CategoryDoc, "name">>
 ): Promise<CategoryDoc | null> => {
   if (!Types.ObjectId.isValid(id)) {
     throw new CategoryServiceError(400, "Invalid category ID", "INVALID_ID");
@@ -129,14 +118,13 @@ export const updateCategory = async (
 
       const existing = await Category.findOne({
         _id: { $ne: id },
-        type: category.type,
         name: { $regex: new RegExp(`^${escaped}$`, "i") },
       });
 
       if (existing) {
         throw new CategoryServiceError(
           409,
-          `Category "${normalizedName}" already exists under type "${category.type}"`,
+          `Category "${normalizedName}" already exists`,
           "DUPLICATE_CATEGORY"
         );
       }

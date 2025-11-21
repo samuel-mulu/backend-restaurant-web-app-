@@ -29,7 +29,7 @@ export const getDashboardStats = async (_req: Request, res: Response) => {
       Order.countDocuments({ status: "rejected" }),
       Item.countDocuments({ isDeleted: false }),
       Item.countDocuments({ isDeleted: false, isAvailable: true }),
-      Category.countDocuments({ isActive: true }),
+      Category.countDocuments(),
       Order.countDocuments({
         createdAt: {
           $gte: new Date(new Date().setHours(0, 0, 0, 0)),
