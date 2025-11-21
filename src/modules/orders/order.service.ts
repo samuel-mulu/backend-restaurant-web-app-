@@ -60,7 +60,7 @@ export const createOrder = async (
     if (existing) {
       await existing.populate(
         "items.itemId",
-        "itemCode name description price images type isAvailable"
+        "itemCode name description price images isAvailable"
       );
       await existing.populate("waiterId", "name email phone");
       await existing.populate("cashierId", "name email phone");
@@ -114,7 +114,7 @@ export const createOrder = async (
   // Populate item details before returning
   await order.populate(
     "items.itemId",
-    "itemCode name description price images type isAvailable ingredients"
+    "itemCode name description price images isAvailable ingredients"
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -164,7 +164,7 @@ export const listOrders = async (
     .sort({ createdAt: -1 })
     .populate(
       "items.itemId",
-      "itemCode name description price images type isAvailable ingredients"
+      "itemCode name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
@@ -174,7 +174,7 @@ export const getOrder = async (id: string): Promise<OrderDoc | null> => {
   return await Order.findById(id)
     .populate(
       "items.itemId",
-      "itemCode name description price images type isAvailable ingredients"
+      "itemCode name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
@@ -234,7 +234,7 @@ export const updateOrderStatus = async (
 
   await order.populate(
     "items.itemId",
-    "itemCode name description price images type isAvailable ingredients"
+    "itemCode name description price images isAvailable ingredients"
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -294,7 +294,7 @@ export const updateOrder = async (
 
   await order.populate(
     "items.itemId",
-    "itemCode name description price images type isAvailable ingredients"
+    "itemCode name description price images isAvailable ingredients"
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -309,7 +309,7 @@ export const getOrdersByWaiter = async (
     .sort({ createdAt: -1 })
     .populate(
       "items.itemId",
-      "itemCode name description price images type isAvailable ingredients"
+      "itemCode name description price images isAvailable ingredients"
     )
     .populate("cashierId", "name email phone");
 };
@@ -321,7 +321,7 @@ export const getOrdersByCashier = async (
     .sort({ createdAt: -1 })
     .populate(
       "items.itemId",
-      "itemCode name description price images type isAvailable ingredients"
+      "itemCode name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone");
 };
@@ -330,7 +330,7 @@ export const markOrderAsPrinted = async (id: string) => {
   const order = await Order.findById(id)
     .populate(
       "items.itemId",
-      "itemCode name description price images type isAvailable ingredients"
+      "itemCode name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");

@@ -506,8 +506,8 @@ export interface InventoryAnalyticsFilters {
 
 export interface InventoryAnalytics {
   consumptionTrends: Array<{
-    productId: string;
-    productName: string;
+    inventoryId: string;
+    inventoryName: string;
     date: string;
     quantity: number;
   }>;
@@ -517,8 +517,8 @@ export interface InventoryAnalytics {
     purchaseCount: number;
   };
   stockLevels: Array<{
-    productId: string;
-    productName: string;
+    inventoryId: string;
+    inventoryName: string;
     date: string;
     quantity: number;
   }>;
@@ -542,18 +542,9 @@ export const getInventoryAnalytics = async (
           : {},
     },
     {
-      $lookup: {
-        from: "items",
-        localField: "productId",
-        foreignField: "_id",
-        as: "product",
-      },
-    },
-    { $unwind: "$product" },
-    {
       $group: {
         _id: {
-          productId: "$productId",
+          inventoryId: "$_id",
           date: {
             $dateToString: {
               format: "%Y-%m-%d",
@@ -561,15 +552,15 @@ export const getInventoryAnalytics = async (
             },
           },
         },
-        productName: { $first: "$product.name" },
+        inventoryName: { $first: "$name" },
         quantity: { $sum: "$purchaseHistory.quantity" },
       },
     },
     { $sort: { "_id.date": 1 } },
     {
       $project: {
-        productId: "$_id.productId",
-        productName: 1,
+        inventoryId: { $toString: "$_id.inventoryId" },
+        inventoryName: 1,
         date: "$_id.date",
         quantity: 1,
         _id: 0,
@@ -604,18 +595,9 @@ export const getInventoryAnalytics = async (
   // Stock levels over time (simplified - would need historical tracking for accurate data)
   const stockLevels = await Inventory.aggregate([
     {
-      $lookup: {
-        from: "items",
-        localField: "productId",
-        foreignField: "_id",
-        as: "product",
-      },
-    },
-    { $unwind: "$product" },
-    {
       $project: {
-        productId: "$productId",
-        productName: "$product.name",
+        inventoryId: { $toString: "$_id" },
+        inventoryName: "$name",
         date: { $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" } },
         quantity: 1,
         _id: 0,

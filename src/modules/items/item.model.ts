@@ -1,5 +1,4 @@
 import { Schema, model, Document, Types } from "mongoose";
-export type ItemType = "food" | "beverage";
 
 export interface ImageInfo {
   url: string;
@@ -9,18 +8,13 @@ export interface ImageInfo {
 export interface ItemDoc extends Document {
   _id: Types.ObjectId;
   id: string;
-  type: ItemType;
   categoryId: Schema.Types.ObjectId;
   category?: any; // Virtual field for populated category
   itemCode: string;
-  sku?: string;
   name: string;
   description?: string;
   price?: number; // store in cents if you prefer: int
-  images?: ImageInfo[];
-  productType: "menu" | "inventory";
-  stock?: number;
-  unit?: string;
+  image?: ImageInfo;
   isAvailable: boolean;
   isDeleted?: boolean;
   deletedAt?: Date;
@@ -32,12 +26,6 @@ export interface ItemDoc extends Document {
 
 const ItemSchema = new Schema<ItemDoc>(
   {
-    type: {
-      type: String,
-      enum: ["food", "beverage"],
-      required: true,
-      index: true,
-    },
     categoryId: {
       type: Schema.Types.ObjectId,
       ref: "Category",
@@ -52,31 +40,13 @@ const ItemSchema = new Schema<ItemDoc>(
       trim: true,
       uppercase: true,
     },
-    sku: {
-      type: String,
-      sparse: true,
-      unique: true,
-      index: true,
-      trim: true,
-      uppercase: true,
-    },
     name: { type: String, required: true, index: true },
     description: String,
     price: { type: Number, required: false, min: 0 },
-    images: [
-      {
-        url: { type: String, required: true },
-        publicId: { type: String, required: true },
-      },
-    ],
-    productType: {
-      type: String,
-      enum: ["menu", "inventory"],
-      default: "menu",
-      index: true,
+    image: {
+      url: { type: String, required: true },
+      publicId: { type: String, required: true },
     },
-    stock: { type: Number, min: 0 },
-    unit: { type: String },
     isAvailable: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date },
@@ -94,9 +64,7 @@ ItemSchema.virtual("category", {
 });
 
 // Compound indexes for performance
-ItemSchema.index({ productType: 1, isAvailable: 1 });
-ItemSchema.index({ categoryId: 1, productType: 1 });
-ItemSchema.index({ type: 1, categoryId: 1 });
+ItemSchema.index({ categoryId: 1, isAvailable: 1 });
 
 // Remove the old unique index since itemCode is now the unique identifier
 // ItemSchema.index({ categoryId: 1, name: 1 }, { unique: true });

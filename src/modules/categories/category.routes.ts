@@ -11,8 +11,8 @@ const router = Router();
 router.get("/", ctrl.list);
 
 // admin only for CRUD
-router.post("/", requireAuth, requireRole("owner"), ctrl.create);
-router.put("/:id", requireAuth, requireRole("owner"), ctrl.update);
-router.delete("/:id", requireAuth, requireRole("owner"), ctrl.remove);
+router.post("/", ctrl.create);
+router.patch("/:id", ctrl.update);
+router.delete("/:id", ctrl.remove);
 
 export default router;

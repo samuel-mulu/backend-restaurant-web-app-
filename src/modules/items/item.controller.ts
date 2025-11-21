@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import * as itemService from "./item.service";
 import { ItemServiceError } from "./item.service";
 
-interface RequestWithFiles extends Request {
-  files?: Express.Multer.File[];
+interface RequestWithFile extends Request {
+  file?: Express.Multer.File;
 }
 
 /**
@@ -50,12 +50,14 @@ const handleError = (err: any, res: Response) => {
 };
 
 export const create = async (
-  req: RequestWithFiles,
+  req: RequestWithFile,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const item = await itemService.createItem(req.body, req.files);
+    // Convert single file to array for service (which handles both cases)
+    const files = req.file ? [req.file] : undefined;
+    const item = await itemService.createItem(req.body, files);
     res.status(201).json({
       success: true,
       data: item,
@@ -68,8 +70,6 @@ export const create = async (
 export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = {
-      type: req.query.type as any,
-      productType: req.query.productType as any,
       categoryId: req.query.categoryId as string,
       includeDeleted: req.query.includeDeleted === "true",
     };
@@ -103,57 +103,16 @@ export const get = async (req: Request, res: Response, next: NextFunction) => {
 };
 
 export const update = async (
-  req: RequestWithFiles,
+  req: RequestWithFile,
   res: Response,
   next: NextFunction
 ) => {
   try {
     const { id } = req.params;
-    const imagesToKeep = JSON.parse(req.body.imagesToKeep || "[]");
+    // Convert single file to array for service (which handles both cases)
+    const files = req.file ? [req.file] : undefined;
 
-    const item = await itemService.updateItem(
-      id,
-      req.body,
-      req.files,
-      imagesToKeep
-    );
-
-    if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: "Item not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: item,
-    });
-  } catch (err: any) {
-    handleError(err, res);
-  }
-};
-
-export const updateStock = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const { id } = req.params;
-    const { stock, operation } = req.body;
-
-    if (stock === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: "Stock value is required",
-      });
-    }
-
-    const item = await itemService.updateStock(id, {
-      stock: Number(stock),
-      operation: operation || "set",
-    });
+    const item = await itemService.updateItem(id, req.body, files);
 
     if (!item) {
       return res.status(404).json({

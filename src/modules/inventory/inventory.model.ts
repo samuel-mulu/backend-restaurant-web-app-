@@ -10,7 +10,10 @@ export interface PurchaseRecord {
 export interface InventoryDoc extends Document {
   _id: Types.ObjectId;
   id: string;
-  productId: Types.ObjectId;
+  name: string;
+  itemCode: string;
+  description?: string;
+  categoryId?: Schema.Types.ObjectId;
   quantity: number;
   unit: string;
   minThreshold?: number;
@@ -23,11 +26,25 @@ export interface InventoryDoc extends Document {
 
 const InventorySchema = new Schema<InventoryDoc>(
   {
-    productId: {
-      type: Schema.Types.ObjectId,
-      ref: "Item",
+    name: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    itemCode: {
+      type: String,
       required: true,
       unique: true,
+      index: true,
+      trim: true,
+      uppercase: true,
+    },
+    description: {
+      type: String,
+    },
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
       index: true,
     },
     quantity: {

@@ -432,8 +432,8 @@ export const broadcastAnalyticsUpdate = (analyticsData: {
 
 // Inventory low stock alerts
 export const notifyInventoryLowStock = (inventoryData: {
-  productId: string;
-  productName: string;
+  inventoryId: string;
+  inventoryName: string;
   quantity: number;
   minThreshold: number;
 }) => {
@@ -441,7 +441,7 @@ export const notifyInventoryLowStock = (inventoryData: {
     const io = getIO();
     console.log(
       "⚠️ Broadcasting inventory low stock alert:",
-      inventoryData.productName
+      inventoryData.inventoryName
     );
 
     io.to("owner:inventory").emit("inventory:low:stock", {

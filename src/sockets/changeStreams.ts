@@ -322,10 +322,7 @@ const handleInventoryUpdate = async (_io: Server, change: any) => {
   // Check if quantity was updated
   if (updatedFields.quantity !== undefined) {
     try {
-      const inventory = await Inventory.findById(inventoryId).populate(
-        "productId",
-        "name"
-      );
+      const inventory = await Inventory.findById(inventoryId);
 
       if (!inventory) {
         return;
@@ -336,10 +333,9 @@ const handleInventoryUpdate = async (_io: Server, change: any) => {
         inventory.minThreshold &&
         inventory.quantity < inventory.minThreshold
       ) {
-        const product = inventory.productId as any;
         notifyInventoryLowStock({
-          productId: inventory.productId.toString(),
-          productName: product?.name || "Unknown",
+          inventoryId: inventory._id.toString(),
+          inventoryName: inventory.name,
           quantity: inventory.quantity,
           minThreshold: inventory.minThreshold,
         });
