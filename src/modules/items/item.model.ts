@@ -7,6 +7,7 @@ export interface ImageInfo {
 
 export interface ItemDoc extends Document {
   _id: Types.ObjectId;
+  id: string; // virtual
   name: string;
   categoryId: Types.ObjectId;
   category?: any;
@@ -80,6 +81,11 @@ const ItemSchema = new Schema<ItemDoc>(
     toObject: { virtuals: true },
   }
 );
+
+// Virtual for id (convert _id to string id)
+ItemSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
 
 // Virtual for category
 ItemSchema.virtual("category", {
