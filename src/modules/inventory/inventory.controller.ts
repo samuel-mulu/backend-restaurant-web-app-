@@ -4,21 +4,22 @@ import { validate } from "../../common/middleware/validate";
 import {
   createInventorySchema,
   updateInventorySchema,
-  purchaseSchema,
 } from "./inventory.validation";
+
+// Utility response handler
+const send = (res: Response, code: number, payload: any) =>
+  res.status(code).json({ success: code < 400, ...payload });
 
 export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = {
       lowStock: req.query.lowStock === "true",
+      categoryId: req.query.categoryId as string | undefined,
     };
 
     const items = await inventoryService.listInventory(filters);
 
-    res.status(200).json({
-      success: true,
-      data: items,
-    });
+    return send(res, 200, { data: items });
   } catch (err) {
     next(err);
   }
@@ -30,20 +31,10 @@ export const getById = async (
   next: NextFunction
 ) => {
   try {
-    const inventory = await inventoryService.getInventoryById(req.params.id);
+    const item = await inventoryService.getInventoryById(req.params.id);
+    if (!item) return send(res, 404, { message: "Inventory record not found" });
 
-    if (!inventory) {
-      res.status(404).json({
-        success: false,
-        message: "Inventory record not found",
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-      data: inventory,
-    });
+    return send(res, 200, { data: item });
   } catch (err) {
     next(err);
   }
@@ -54,20 +45,11 @@ export const create = [
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const inventory = await inventoryService.createInventory(req.body);
-
-      res.status(201).json({
-        success: true,
+      return send(res, 201, {
         message: "Inventory record created successfully",
         data: inventory,
       });
-    } catch (err: any) {
-      if (err.status) {
-        res.status(err.status).json({
-          success: false,
-          message: err.message,
-        });
-        return;
-      }
+    } catch (err) {
       next(err);
     }
   },
@@ -77,68 +59,19 @@ export const update = [
   validate(updateInventorySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const inventory = await inventoryService.updateInventory(
+      const updated = await inventoryService.updateInventory(
         req.params.id,
         req.body
       );
 
-      if (!inventory) {
-        res.status(404).json({
-          success: false,
-          message: "Inventory record not found",
-        });
-        return;
-      }
+      if (!updated)
+        return send(res, 404, { message: "Inventory record not found" });
 
-      res.status(200).json({
-        success: true,
+      return send(res, 200, {
         message: "Inventory record updated successfully",
-        data: inventory,
+        data: updated,
       });
-    } catch (err: any) {
-      if (err.status) {
-        res.status(err.status).json({
-          success: false,
-          message: err.message,
-        });
-        return;
-      }
-      next(err);
-    }
-  },
-];
-
-export const recordPurchase = [
-  validate(purchaseSchema),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user?._id) {
-        res.status(401).json({
-          success: false,
-          message: "Authentication required",
-        });
-        return;
-      }
-
-      const inventory = await inventoryService.recordPurchase(
-        req.params.id,
-        req.body,
-        req.user._id
-      );
-
-      res.status(200).json({
-        success: true,
-        message: "Purchase recorded successfully",
-        data: inventory,
-      });
-    } catch (err: any) {
-      if (err.status) {
-        res.status(err.status).json({
-          success: false,
-          message: err.message,
-        });
-        return;
-      }
+    } catch (err) {
       next(err);
     }
   },
@@ -151,36 +84,8 @@ export const getLowStock = async (
 ) => {
   try {
     const items = await inventoryService.getLowStockItems();
-
-    res.status(200).json({
-      success: true,
-      data: items,
-    });
+    return send(res, 200, { data: items });
   } catch (err) {
-    next(err);
-  }
-};
-
-export const getPurchaseHistory = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const history = await inventoryService.getPurchaseHistory(req.params.id);
-
-    res.status(200).json({
-      success: true,
-      data: history,
-    });
-  } catch (err: any) {
-    if (err.status) {
-      res.status(err.status).json({
-        success: false,
-        message: err.message,
-      });
-      return;
-    }
     next(err);
   }
 };

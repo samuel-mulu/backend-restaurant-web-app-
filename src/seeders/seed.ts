@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { connectMongo, closeMongoConnection } from "../config/database";
 import { Category } from "../modules/categories/category.model";
 import { Item } from "../modules/items/item.model";
@@ -20,96 +20,129 @@ const categories = [
 const menuItems = [
   // Appetizers
   {
-    categoryId: "", // Will be set after category creation
-    itemCode: "APP-001",
+    categoryName: "Appetizers",
     name: "Spring Rolls",
     description: "Crispy vegetable spring rolls served with sweet chili sauce",
     price: 8.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Spring+Rolls",
+      publicId: "seed/app-001",
+    },
     isAvailable: true,
   },
   {
-    categoryId: "",
-    itemCode: "APP-002",
+    categoryName: "Appetizers",
     name: "Chicken Wings",
     description: "Spicy buffalo wings with blue cheese dip",
     price: 12.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Chicken+Wings",
+      publicId: "seed/app-002",
+    },
     isAvailable: true,
   },
   // Main Courses
   {
-    categoryId: "",
-    itemCode: "MAIN-001",
+    categoryName: "Main Courses",
     name: "Grilled Salmon",
     description: "Fresh Atlantic salmon with lemon butter sauce and vegetables",
     price: 24.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Grilled+Salmon",
+      publicId: "seed/main-001",
+    },
     isAvailable: true,
   },
   {
-    categoryId: "",
-    itemCode: "MAIN-002",
+    categoryName: "Main Courses",
     name: "Beef Steak",
     description:
       "Tender ribeye steak cooked to perfection with mashed potatoes",
     price: 29.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Beef+Steak",
+      publicId: "seed/main-002",
+    },
     isAvailable: true,
   },
   {
-    categoryId: "",
-    itemCode: "MAIN-003",
+    categoryName: "Main Courses",
     name: "Chicken Curry",
     description: "Spicy chicken curry with basmati rice and naan bread",
     price: 18.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Chicken+Curry",
+      publicId: "seed/main-003",
+    },
     isAvailable: true,
   },
   // Salads
   {
-    categoryId: "",
-    itemCode: "SAL-001",
+    categoryName: "Salads",
     name: "Caesar Salad",
     description: "Fresh romaine lettuce with caesar dressing and parmesan",
     price: 11.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Caesar+Salad",
+      publicId: "seed/sal-001",
+    },
     isAvailable: true,
   },
   {
-    categoryId: "",
-    itemCode: "SAL-002",
+    categoryName: "Salads",
     name: "Greek Salad",
     description: "Mixed greens with feta cheese, olives, and vinaigrette",
     price: 12.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Greek+Salad",
+      publicId: "seed/sal-002",
+    },
     isAvailable: true,
   },
   // Pizza
   {
-    categoryId: "",
-    itemCode: "PIZ-001",
+    categoryName: "Pizza",
     name: "Margherita Pizza",
     description: "Classic pizza with tomato, mozzarella, and basil",
     price: 14.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Margherita+Pizza",
+      publicId: "seed/piz-001",
+    },
     isAvailable: true,
   },
   {
-    categoryId: "",
-    itemCode: "PIZ-002",
+    categoryName: "Pizza",
     name: "Pepperoni Pizza",
     description: "Traditional pizza with pepperoni and mozzarella cheese",
     price: 16.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Pepperoni+Pizza",
+      publicId: "seed/piz-002",
+    },
     isAvailable: true,
   },
   // Desserts
   {
-    categoryId: "",
-    itemCode: "DES-001",
+    categoryName: "Desserts",
     name: "Chocolate Cake",
     description: "Rich chocolate layer cake with vanilla frosting",
     price: 9.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Chocolate+Cake",
+      publicId: "seed/des-001",
+    },
     isAvailable: true,
   },
   {
-    categoryId: "",
-    itemCode: "DES-002",
+    categoryName: "Desserts",
     name: "Ice Cream Sundae",
     description: "Vanilla ice cream with hot fudge and whipped cream",
     price: 7.99,
+    image: {
+      url: "https://placeholder.com/400x300?text=Ice+Cream+Sundae",
+      publicId: "seed/des-002",
+    },
     isAvailable: true,
   },
 ];
@@ -117,45 +150,40 @@ const menuItems = [
 const inventoryItems = [
   {
     name: "Rice (10kg bag)",
-    itemCode: "INV-001",
     description: "Premium basmati rice for restaurant use",
-    categoryId: "", // Will be set after category creation
+    categoryName: "Main Courses", // Will be set after category creation
     quantity: 50,
     unit: "bag",
     minThreshold: 10,
   },
   {
     name: "Olive Oil (5L)",
-    itemCode: "INV-002",
     description: "Extra virgin olive oil for cooking",
-    categoryId: "",
+    categoryName: "Main Courses",
     quantity: 30,
     unit: "bottle",
     minThreshold: 5,
   },
   {
     name: "Flour (20kg)",
-    itemCode: "INV-003",
     description: "All-purpose flour for baking",
-    categoryId: "",
+    categoryName: "Main Courses",
     quantity: 75,
     unit: "bag",
     minThreshold: 15,
   },
   {
     name: "Coffee Beans (2kg)",
-    itemCode: "INV-004",
     description: "Premium arabica coffee beans",
-    categoryId: "",
+    categoryName: "Coffee",
     quantity: 20,
     unit: "bag",
     minThreshold: 5,
   },
   {
     name: "Sugar (10kg)",
-    itemCode: "INV-005",
     description: "Granulated white sugar",
-    categoryId: "",
+    categoryName: "Main Courses",
     quantity: 100,
     unit: "bag",
     minThreshold: 20,
@@ -169,14 +197,54 @@ async function seedDatabase() {
     // Connect to MongoDB
     await connectMongo();
 
-    // Clear existing data (optional - comment out if you want to keep existing data)
-    const clearData = process.env.CLEAR_DATA === "true";
-    if (clearData) {
-      console.log("🗑️  Clearing existing data...");
-      await Category.deleteMany({});
-      await Item.deleteMany({});
-      await Inventory.deleteMany({});
-      console.log("✅ Existing data cleared");
+    // Clear existing data before seeding
+    // Using collection.deleteMany to bypass pre-hooks that filter isDeleted: false
+    console.log("🗑️  Clearing existing data...");
+    await Category.collection.deleteMany({});
+    await Item.collection.deleteMany({});
+    await Inventory.collection.deleteMany({});
+    console.log("✅ Existing data cleared");
+
+    // Drop any leftover indexes that might cause conflicts
+    console.log("🔧 Cleaning up indexes...");
+
+    // Drop itemCode index from Items collection
+    try {
+      await Item.collection.dropIndex("itemCode_1");
+      console.log("✅ Dropped itemCode_1 index");
+    } catch (error: any) {
+      // Index might not exist, which is fine
+      if (error.code !== 27) {
+        // 27 is the error code for index not found
+        console.warn("⚠️  Could not drop itemCode_1 index:", error.message);
+      }
+    }
+
+    // Drop productId index from Inventory collection
+    try {
+      await Inventory.collection.dropIndex("productId_1");
+      console.log("✅ Dropped productId_1 index");
+    } catch (error: any) {
+      // Index might not exist, which is fine
+      if (error.code !== 27) {
+        // 27 is the error code for index not found
+        console.warn("⚠️  Could not drop productId_1 index:", error.message);
+      }
+    }
+
+    // Drop itemCode index from Inventory collection
+    try {
+      await Inventory.collection.dropIndex("itemCode_1");
+      console.log("✅ Dropped itemCode_1 index from Inventory");
+    } catch (error: any) {
+      // Index might not exist, which is fine
+      if (error.code !== 27) {
+        // 27 is the error code for index not found
+        console.warn(
+          "⚠️  Could not drop itemCode_1 index from Inventory:",
+          error.message
+        );
+      }
     }
 
     // Seed Categories
@@ -185,47 +253,43 @@ async function seedDatabase() {
     console.log(`✅ Created ${createdCategories.length} categories`);
 
     // Create a map of category names to IDs
-    const categoryMap: { [key: string]: string } = {};
+    // Note: Category schema has lowercase: true, so names are stored in lowercase
+    const categoryMap: { [key: string]: Types.ObjectId } = {};
     createdCategories.forEach((cat) => {
-      categoryMap[cat.name] = cat._id.toString();
+      // Names are already lowercase due to schema lowercase: true
+      categoryMap[cat.name] = cat._id;
     });
 
     // Helper function to get category ID by name
-    const getCategoryId = (name: string): string => {
-      return categoryMap[name];
+    const getCategoryId = (name: string): Types.ObjectId | undefined => {
+      return categoryMap[name.toLowerCase()];
     };
 
     // Seed Menu Items
     console.log("🍽️  Seeding menu items...");
-    const menuItemsWithCategories = menuItems.map((item, index) => {
-      let categoryId = "";
-      if (item.itemCode.startsWith("APP")) {
-        categoryId = getCategoryId("Appetizers");
-      } else if (item.itemCode.startsWith("MAIN")) {
-        categoryId = getCategoryId("Main Courses");
-      } else if (item.itemCode.startsWith("SAL")) {
-        categoryId = getCategoryId("Salads");
-      } else if (item.itemCode.startsWith("PIZ")) {
-        categoryId = getCategoryId("Pizza");
-      } else if (item.itemCode.startsWith("DES")) {
-        categoryId = getCategoryId("Desserts");
+    const menuItemsWithCategories = menuItems.map((item) => {
+      const categoryId = getCategoryId(item.categoryName);
+      if (!categoryId) {
+        throw new Error(`Category not found: ${item.categoryName}`);
       }
-      return { ...item, categoryId };
+      const { categoryName, ...itemData } = item;
+      // Price will be automatically converted to cents by the schema setter
+      // categoryId is required, so we ensure it's a valid ObjectId
+      return { ...itemData, categoryId };
     });
 
     const createdMenuItems = await Item.insertMany(menuItemsWithCategories);
     console.log(`✅ Created ${createdMenuItems.length} menu items`);
 
-    // Seed Inventory Records (standalone)
+    // Seed Inventory Records
     console.log("📊 Seeding inventory records...");
     const inventoryItemsWithCategories = inventoryItems.map((item) => {
-      // Use Main Courses category for inventory items
-      const categoryId = getCategoryId("Main Courses");
+      const categoryId = getCategoryId(item.categoryName);
+      const { categoryName, ...itemData } = item;
+      // categoryId is optional for Inventory, so we can leave it undefined if not found
       return {
-        ...item,
-        categoryId: categoryId
-          ? new mongoose.Types.ObjectId(categoryId)
-          : undefined,
+        ...itemData,
+        categoryId: categoryId || undefined,
       };
     });
 

@@ -1,9 +1,13 @@
 import { Types } from "mongoose";
 import { Inventory, InventoryDoc } from "./inventory.model";
 
+export interface ListInventoryFilters {
+  lowStock?: boolean;
+  categoryId?: string;
+}
+
 export interface CreateInventoryInput {
   name: string;
-  itemCode: string;
   description?: string;
   categoryId?: string;
   quantity: number;
@@ -13,237 +17,124 @@ export interface CreateInventoryInput {
 
 export interface UpdateInventoryInput {
   name?: string;
-  itemCode?: string;
   description?: string;
   categoryId?: string;
   quantity?: number;
   minThreshold?: number;
 }
 
-export interface PurchaseInput {
-  quantity: number;
-  cost: number;
-  purchaseDate?: Date;
-}
+/* ---------------------- COMMON UTILS ---------------------- */
 
-export interface ListInventoryFilters {
-  lowStock?: boolean;
-}
+const validateObjectId = (id: string, message = "Invalid ID") => {
+  if (id && !Types.ObjectId.isValid(id)) {
+    throw { status: 400, message };
+  }
+};
+
+/* ---------------------- LIST ---------------------- */
 
 export const listInventory = async (filters: ListInventoryFilters = {}) => {
   const query: any = {};
 
-  if (filters.lowStock) {
-    // Find items where quantity < minThreshold
-    const lowStockItems = await Inventory.find({
-      $expr: { $lt: ["$quantity", { $ifNull: ["$minThreshold", 0] }] },
-    })
-      .populate("categoryId", "name")
-      .sort({ quantity: 1 })
-      .lean();
-
-    return lowStockItems;
+  // Optional category filter
+  if (filters.categoryId) {
+    validateObjectId(filters.categoryId, "Invalid category ID");
+    query.categoryId = new Types.ObjectId(filters.categoryId);
   }
 
-  const items = await Inventory.find(query)
-    .populate("categoryId", "name type")
-    .sort({ createdAt: -1 })
-    .lean();
+  // Low stock filter
+  if (filters.lowStock) {
+    query.$expr = {
+      $lte: ["$quantity", { $ifNull: ["$minThreshold", 0] }],
+    };
+  }
 
-  return items;
+  return Inventory.find(query)
+    .populate("categoryId", "name type")
+    .sort(filters.lowStock ? { quantity: 1 } : { createdAt: -1 })
+    .lean();
 };
+
+/* ---------------------- GET BY ID ---------------------- */
 
 export const getInventoryById = async (
   id: string
 ): Promise<InventoryDoc | null> => {
-  const inventory = await Inventory.findById(id)
-    .populate("categoryId", "name type")
-    .lean();
+  validateObjectId(id, "Invalid inventory ID");
 
-  return inventory as any;
+  // Return document so virtuals work
+  return Inventory.findById(id).populate("categoryId", "name type");
 };
+
+/* ---------------------- CREATE ---------------------- */
 
 export const createInventory = async (
   data: CreateInventoryInput
 ): Promise<InventoryDoc> => {
-  // Normalize itemCode
-  const itemCode = data.itemCode.trim().toUpperCase();
-
-  // Check if inventory with this itemCode already exists
-  const existing = await Inventory.findOne({ itemCode });
-  if (existing) {
-    throw {
-      status: 409,
-      message: "Inventory record with this item code already exists",
-    };
-  }
-
-  // Validate quantity
-  if (data.quantity < 0) {
+  if (data.quantity < 0)
     throw { status: 400, message: "Quantity cannot be negative" };
-  }
 
-  // Validate minThreshold
-  if (data.minThreshold !== undefined && data.minThreshold < 0) {
-    throw { status: 400, message: "Min threshold cannot be negative" };
-  }
-
-  // Validate categoryId if provided
-  if (data.categoryId && !Types.ObjectId.isValid(data.categoryId)) {
-    throw { status: 400, message: "Invalid category ID" };
-  }
+  validateObjectId(data.categoryId || "", "Invalid category ID");
 
   const inventory = await Inventory.create({
     name: data.name.trim(),
-    itemCode,
     description: data.description?.trim(),
-    categoryId: data.categoryId
-      ? (new Types.ObjectId(data.categoryId) as any)
-      : undefined,
+    categoryId: data.categoryId || undefined,
     quantity: data.quantity,
     unit: data.unit,
-    minThreshold: data.minThreshold,
+    minThreshold: data.minThreshold ?? 0,
   });
 
   await inventory.populate("categoryId", "name type");
 
   return inventory;
 };
+
+/* ---------------------- UPDATE ---------------------- */
 
 export const updateInventory = async (
   id: string,
   data: UpdateInventoryInput
 ): Promise<InventoryDoc | null> => {
-  if (!Types.ObjectId.isValid(id)) {
-    throw { status: 400, message: "Invalid inventory ID" };
-  }
+  validateObjectId(id, "Invalid inventory ID");
 
   const inventory = await Inventory.findById(id);
+  if (!inventory) return null;
 
-  if (!inventory) {
-    throw { status: 404, message: "Inventory record not found" };
-  }
+  if (data.name !== undefined) inventory.name = data.name.trim();
+  if (data.description !== undefined)
+    inventory.description = data.description?.trim();
 
-  // Update name if provided
-  if (data.name !== undefined) {
-    inventory.name = data.name.trim();
-  }
-
-  // Update itemCode if provided (check for duplicates)
-  if (data.itemCode !== undefined) {
-    const itemCode = data.itemCode.trim().toUpperCase();
-    if (itemCode !== inventory.itemCode) {
-      const existing = await Inventory.findOne({
-        itemCode,
-        _id: { $ne: id },
-      });
-      if (existing) {
-        throw {
-          status: 409,
-          message: "Inventory record with this item code already exists",
-        };
-      }
-      inventory.itemCode = itemCode;
-    }
-  }
-
-  // Update description if provided
-  if (data.description !== undefined) {
-    inventory.description = data.description.trim();
-  }
-
-  // Update categoryId if provided
   if (data.categoryId !== undefined) {
-    if (data.categoryId && !Types.ObjectId.isValid(data.categoryId)) {
-      throw { status: 400, message: "Invalid category ID" };
-    }
-    inventory.categoryId = data.categoryId
-      ? (new Types.ObjectId(data.categoryId) as any)
-      : undefined;
+    validateObjectId(data.categoryId, "Invalid category ID");
+    inventory.categoryId = data.categoryId || undefined;
   }
 
-  // Update quantity if provided
   if (data.quantity !== undefined) {
-    if (data.quantity < 0) {
+    if (data.quantity < 0)
       throw { status: 400, message: "Quantity cannot be negative" };
-    }
     inventory.quantity = data.quantity;
   }
 
-  // Update minThreshold if provided
   if (data.minThreshold !== undefined) {
-    if (data.minThreshold < 0) {
+    if (data.minThreshold < 0)
       throw { status: 400, message: "Min threshold cannot be negative" };
-    }
     inventory.minThreshold = data.minThreshold;
   }
 
   await inventory.save();
-
   await inventory.populate("categoryId", "name type");
 
   return inventory;
 };
 
-export const recordPurchase = async (
-  id: string,
-  data: PurchaseInput,
-  purchasedBy: string
-): Promise<InventoryDoc | null> => {
-  const inventory = await Inventory.findById(id);
-
-  if (!inventory) {
-    throw { status: 404, message: "Inventory record not found" };
-  }
-
-  if (data.quantity <= 0) {
-    throw { status: 400, message: "Purchase quantity must be greater than 0" };
-  }
-
-  if (data.cost < 0) {
-    throw { status: 400, message: "Purchase cost cannot be negative" };
-  }
-
-  // Update quantity
-  inventory.quantity += data.quantity;
-  inventory.lastPurchaseDate = data.purchaseDate || new Date();
-
-  // Add to purchase history
-  inventory.purchaseHistory.push({
-    quantity: data.quantity,
-    purchaseDate: data.purchaseDate || new Date(),
-    cost: data.cost,
-    purchasedBy: new Types.ObjectId(purchasedBy),
-  });
-
-  await inventory.save();
-
-  await inventory.populate("categoryId", "name type");
-  await inventory.populate("purchaseHistory.purchasedBy", "name email");
-
-  return inventory;
-};
+/* ---------------------- LOW STOCK ---------------------- */
 
 export const getLowStockItems = async () => {
-  const lowStockItems = await Inventory.find({
-    $expr: { $lt: ["$quantity", { $ifNull: ["$minThreshold", 0] }] },
+  return Inventory.find({
+    $expr: { $lte: ["$quantity", { $ifNull: ["$minThreshold", 0] }] },
   })
     .populate("categoryId", "name type")
     .sort({ quantity: 1 })
     .lean();
-
-  return lowStockItems;
-};
-
-export const getPurchaseHistory = async (id: string) => {
-  const inventory = await Inventory.findById(id)
-    .populate("purchaseHistory.purchasedBy", "name email")
-    .select("purchaseHistory")
-    .lean();
-
-  if (!inventory) {
-    throw { status: 404, message: "Inventory record not found" };
-  }
-
-  return inventory.purchaseHistory || [];
 };

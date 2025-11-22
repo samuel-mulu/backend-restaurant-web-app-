@@ -1,25 +1,22 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Schema, model, Document, Types, Query } from "mongoose";
 
 export interface ImageInfo {
-  url: string;
-  publicId: string;
+  url?: string;
+  publicId?: string;
 }
 
 export interface ItemDoc extends Document {
   _id: Types.ObjectId;
-  id: string;
-  categoryId: Schema.Types.ObjectId;
-  category?: any; // Virtual field for populated category
-  itemCode: string;
   name: string;
+  categoryId: Types.ObjectId;
+  category?: any;
   description?: string;
-  price?: number; // store in cents if you prefer: int
+  price: number;
   image?: ImageInfo;
   isAvailable: boolean;
-  isDeleted?: boolean;
+  isDeleted: boolean;
   deletedAt?: Date;
   clientId?: string;
-  __v?: number; // Version for optimistic concurrency control
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,30 +29,59 @@ const ItemSchema = new Schema<ItemDoc>(
       required: true,
       index: true,
     },
-    itemCode: {
+
+    name: {
       type: String,
       required: true,
-      unique: true,
-      index: true,
       trim: true,
-      uppercase: true,
+      maxlength: 120,
+      index: true,
     },
-    name: { type: String, required: true, index: true },
-    description: String,
-    price: { type: Number, required: false, min: 0 },
+
+    description: { type: String, trim: true, maxlength: 500 },
+
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+      get: (v: number): number => v / 100,
+      set: (v: number): number => Math.round(v * 100),
+    },
+
     image: {
-      url: { type: String, required: true },
-      publicId: { type: String, required: true },
+      url: String,
+      publicId: String,
     },
-    isAvailable: { type: Boolean, default: true },
+
+    isAvailable: { type: Boolean, default: true, index: true },
+
     isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: { type: Date },
-    clientId: { type: String, sparse: true, unique: true },
+
+    deletedAt: Date,
+
+    clientId: { type: String, index: true },
   },
-  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      versionKey: false,
+      transform: (_: any, ret: Record<string, any>) => {
+        delete ret._id;
+        delete ret.isDeleted;
+        delete ret.deletedAt;
+        // Remove categoryId if category is populated
+        if (ret.category) {
+          delete ret.categoryId;
+        }
+        return ret;
+      },
+    },
+    toObject: { virtuals: true },
+  }
 );
 
-// Virtual field for fully populated category
+// Virtual for category
 ItemSchema.virtual("category", {
   ref: "Category",
   localField: "categoryId",
@@ -63,10 +89,16 @@ ItemSchema.virtual("category", {
   justOne: true,
 });
 
-// Compound indexes for performance
-ItemSchema.index({ categoryId: 1, isAvailable: 1 });
+// Auto-hide deleted
+ItemSchema.pre(/^find/, function (next) {
+  (this as Query<any, any>).where({ isDeleted: false });
+  next();
+});
 
-// Remove the old unique index since itemCode is now the unique identifier
-// ItemSchema.index({ categoryId: 1, name: 1 }, { unique: true });
+// Full-text search
+ItemSchema.index({ name: "text", description: "text" });
+
+// Compound index
+ItemSchema.index({ categoryId: 1, isAvailable: 1 });
 
 export const Item = model<ItemDoc>("Item", ItemSchema);

@@ -24,7 +24,6 @@ export class ItemServiceError extends Error {
 
 export interface CreateItemInput {
   categoryId: string;
-  itemCode: string;
   name: string;
   description?: string;
   price?: number;
@@ -34,7 +33,6 @@ export interface CreateItemInput {
 
 export interface UpdateItemInput {
   categoryId?: string;
-  itemCode?: string;
   name?: string;
   description?: string;
   price?: number;
@@ -49,16 +47,6 @@ export interface ListItemsFilters {
 /**
  * Helper Functions
  */
-
-/**
- * Normalizes item code to uppercase and trims whitespace
- */
-const normalizeItemCode = (code: string): string => {
-  if (!code || typeof code !== "string") {
-    throw new ItemServiceError(400, "Item code must be a non-empty string");
-  }
-  return code.trim().toUpperCase();
-};
 
 /**
  * Validates image file for size constraints
@@ -128,9 +116,6 @@ export const createItem = async (
   files?: Express.Multer.File[],
   session?: ClientSession
 ): Promise<ItemDoc> => {
-  // Normalize itemCode
-  data.itemCode = normalizeItemCode(data.itemCode);
-
   // Check for idempotency if clientId provided
   if (data.clientId) {
     const existing = await Item.findOne({ clientId: data.clientId }).session(
@@ -140,18 +125,6 @@ export const createItem = async (
       await existing.populate("category");
       return existing;
     }
-  }
-
-  // Check if itemCode already exists
-  const existingItem = await Item.findOne({ itemCode: data.itemCode }).session(
-    session || null
-  );
-  if (existingItem) {
-    throw new ItemServiceError(
-      409,
-      "Item code already exists",
-      "DUPLICATE_ITEM_CODE"
-    );
   }
 
   // Handle image
@@ -229,7 +202,18 @@ export const listItems = async (
     delete query.isDeleted;
   }
 
-  return await Item.find(query).populate("category").sort({ name: 1 }).lean();
+  const items = await Item.find(query)
+    .populate("category")
+    .sort({ name: 1 })
+    .lean();
+  // Remove categoryId when category is populated
+  return items.map((item: any) => {
+    if (item.category) {
+      const { categoryId, ...rest } = item;
+      return rest;
+    }
+    return item;
+  });
 };
 
 /**
@@ -242,9 +226,17 @@ export const getItemById = async (id: string): Promise<any | null> => {
     throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
   }
 
-  return await Item.findOne({ _id: id, isDeleted: false })
+  const item = await Item.findOne({ _id: id, isDeleted: false })
     .populate("category")
     .lean();
+
+  // Remove categoryId if category is populated
+  if (item && item.category) {
+    const { categoryId, ...rest } = item;
+    return rest;
+  }
+
+  return item;
 };
 
 /**
@@ -283,31 +275,6 @@ export const updateItem = async (
         "Item has been modified by another user. Please refresh and try again.",
         "VERSION_CONFLICT"
       );
-    }
-
-    // Normalize itemCode if provided
-    if (data.itemCode) {
-      const normalizedItemCode = normalizeItemCode(data.itemCode);
-      // Check if itemCode is being changed and if it already exists
-      // Always exclude the current item from the duplicate check
-      const normalizedOldItemCode = normalizeItemCode(oldItem.itemCode);
-
-      if (normalizedItemCode !== normalizedOldItemCode) {
-        const existingItem = await Item.findOne({
-          itemCode: normalizedItemCode,
-          _id: { $ne: id },
-          isDeleted: { $ne: true }, // Also exclude deleted items
-        }).session(session || null);
-        if (existingItem) {
-          throw new ItemServiceError(
-            409,
-            "Item code already exists",
-            "DUPLICATE_ITEM_CODE"
-          );
-        }
-      }
-      // Assign normalized value
-      data.itemCode = normalizedItemCode;
     }
 
     // Handle image: if new image is uploaded, delete old one

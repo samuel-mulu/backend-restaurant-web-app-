@@ -38,7 +38,6 @@ export type CreateOrderInput = {
   tableNumber: string;
   items: {
     itemId: string;
-    itemCodeSnapshot: string;
     typeSnapshot: "food" | "beverage";
     qty: number;
     nameSnapshot: string;
@@ -60,7 +59,7 @@ export const createOrder = async (
     if (existing) {
       await existing.populate(
         "items.itemId",
-        "itemCode name description price images isAvailable"
+        "name description price images isAvailable"
       );
       await existing.populate("waiterId", "name email phone");
       await existing.populate("cashierId", "name email phone");
@@ -97,7 +96,6 @@ export const createOrder = async (
     tableNumber: payload.tableNumber,
     items: payload.items.map((i) => ({
       itemId: new Types.ObjectId(i.itemId) as any,
-      itemCodeSnapshot: i.itemCodeSnapshot,
       typeSnapshot: i.typeSnapshot,
       qty: i.qty,
       nameSnapshot: i.nameSnapshot,
@@ -114,7 +112,7 @@ export const createOrder = async (
   // Populate item details before returning
   await order.populate(
     "items.itemId",
-    "itemCode name description price images isAvailable ingredients"
+    "name description price images isAvailable ingredients"
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -164,7 +162,7 @@ export const listOrders = async (
     .sort({ createdAt: -1 })
     .populate(
       "items.itemId",
-      "itemCode name description price images isAvailable ingredients"
+      "name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
@@ -174,7 +172,7 @@ export const getOrder = async (id: string): Promise<OrderDoc | null> => {
   return await Order.findById(id)
     .populate(
       "items.itemId",
-      "itemCode name description price images isAvailable ingredients"
+      "name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
@@ -234,7 +232,7 @@ export const updateOrderStatus = async (
 
   await order.populate(
     "items.itemId",
-    "itemCode name description price images isAvailable ingredients"
+    "name description price images isAvailable ingredients"
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -249,7 +247,6 @@ export interface UpdateOrderInput {
   notes?: string;
   items?: {
     itemId: string;
-    itemCodeSnapshot: string;
     typeSnapshot: "food" | "beverage";
     qty: number;
     nameSnapshot: string;
@@ -271,7 +268,6 @@ export const updateOrder = async (
   if (data.items) {
     order.items = data.items.map((i) => ({
       itemId: new Types.ObjectId(i.itemId) as any,
-      itemCodeSnapshot: i.itemCodeSnapshot,
       typeSnapshot: i.typeSnapshot,
       qty: i.qty,
       nameSnapshot: i.nameSnapshot,
@@ -294,7 +290,7 @@ export const updateOrder = async (
 
   await order.populate(
     "items.itemId",
-    "itemCode name description price images isAvailable ingredients"
+    "name description price images isAvailable ingredients"
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -309,7 +305,7 @@ export const getOrdersByWaiter = async (
     .sort({ createdAt: -1 })
     .populate(
       "items.itemId",
-      "itemCode name description price images isAvailable ingredients"
+      "name description price images isAvailable ingredients"
     )
     .populate("cashierId", "name email phone");
 };
@@ -321,7 +317,7 @@ export const getOrdersByCashier = async (
     .sort({ createdAt: -1 })
     .populate(
       "items.itemId",
-      "itemCode name description price images isAvailable ingredients"
+      "name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone");
 };
@@ -330,7 +326,7 @@ export const markOrderAsPrinted = async (id: string) => {
   const order = await Order.findById(id)
     .populate(
       "items.itemId",
-      "itemCode name description price images isAvailable ingredients"
+      "name description price images isAvailable ingredients"
     )
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");

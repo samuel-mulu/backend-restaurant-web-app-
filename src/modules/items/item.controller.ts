@@ -1,4 +1,5 @@
-import { Request, Response, NextFunction } from "express";
+// controllers/item.controller.ts
+import { Request, Response } from "express";
 import * as itemService from "./item.service";
 import { ItemServiceError } from "./item.service";
 
@@ -6,25 +7,34 @@ interface RequestWithFile extends Request {
   file?: Express.Multer.File;
 }
 
-/**
- * Error handler for item operations
- * Provides consistent error response format
- */
-const handleError = (err: any, res: Response) => {
-  // Handle ItemServiceError
+/* -------------------------- Unified Response Helper ------------------------- */
+const sendSuccess = (
+  res: Response,
+  data: any = null,
+  message = "Success",
+  status = 200
+) => {
+  return res.status(status).json({
+    success: true,
+    message,
+    data,
+  });
+};
+
+/* -------------------------- Unified Error Handler --------------------------- */
+const sendError = (res: Response, err: any) => {
   if (err instanceof ItemServiceError) {
     return res.status(err.status).json({
       success: false,
-      error: err.message,
+      message: err.message,
       code: err.code,
     });
   }
 
-  // Handle validation errors
   if (err.name === "ValidationError") {
     return res.status(400).json({
       success: false,
-      error: "Validation error",
+      message: "Validation error",
       details: Object.values(err.errors).map((e: any) => ({
         field: e.path,
         message: e.message,
@@ -32,42 +42,28 @@ const handleError = (err: any, res: Response) => {
     });
   }
 
-  // Handle errors with status property
-  if (err.status) {
-    return res.status(err.status).json({
-      success: false,
-      error: err.message || "An error occurred",
-      code: err.code,
-    });
-  }
+  console.error("Unhandled Item Error:", err);
 
-  // Handle unexpected errors
-  console.error("Item controller error:", err);
   return res.status(500).json({
     success: false,
-    error: err.message || "Internal server error",
+    message: err.message || "Internal server error",
   });
 };
 
-export const create = async (
-  req: RequestWithFile,
-  res: Response,
-  next: NextFunction
-) => {
+/* ------------------------------- Controllers -------------------------------- */
+
+export const create = async (req: RequestWithFile, res: Response) => {
   try {
-    // Convert single file to array for service (which handles both cases)
-    const files = req.file ? [req.file] : undefined;
-    const item = await itemService.createItem(req.body, files);
-    res.status(201).json({
-      success: true,
-      data: item,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    const file = req.file ? [req.file] : undefined;
+    const item = await itemService.createItem(req.body, file);
+
+    return sendSuccess(res, item, "Item created successfully", 201);
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const list = async (req: Request, res: Response, next: NextFunction) => {
+export const list = async (req: Request, res: Response) => {
   try {
     const filters = {
       categoryId: req.query.categoryId as string,
@@ -75,162 +71,94 @@ export const list = async (req: Request, res: Response, next: NextFunction) => {
     };
 
     const items = await itemService.listItems(filters);
-    res.json({
-      success: true,
-      data: items,
-    });
-  } catch (err: any) {
-    next(err);
+    return sendSuccess(res, items);
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const get = async (req: Request, res: Response, next: NextFunction) => {
+export const get = async (req: Request, res: Response) => {
   try {
     const item = await itemService.getItemById(req.params.id);
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: "Item not found",
-      });
+      return sendError(res, new ItemServiceError(404, "Item not found"));
     }
-    res.json({
-      success: true,
-      data: item,
-    });
-  } catch (err: any) {
-    next(err);
+
+    return sendSuccess(res, item);
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const update = async (
-  req: RequestWithFile,
-  res: Response,
-  next: NextFunction
-) => {
+export const update = async (req: RequestWithFile, res: Response) => {
   try {
-    const { id } = req.params;
-    // Convert single file to array for service (which handles both cases)
-    const files = req.file ? [req.file] : undefined;
+    const file = req.file ? [req.file] : undefined;
 
-    const item = await itemService.updateItem(id, req.body, files);
-
+    const item = await itemService.updateItem(req.params.id, req.body, file);
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: "Item not found",
-      });
+      return sendError(res, new ItemServiceError(404, "Item not found"));
     }
 
-    res.json({
-      success: true,
-      data: item,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    return sendSuccess(res, item, "Item updated successfully");
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const remove = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const remove = async (req: Request, res: Response) => {
   try {
     const item = await itemService.deleteItem(req.params.id);
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: "Item not found or already deleted",
-      });
+      return sendError(res, new ItemServiceError(404, "Item not found"));
     }
 
-    res.json({
-      success: true,
-      message: "Item has been soft deleted",
-      data: item,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    return sendSuccess(res, item, "Item soft-deleted");
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const restore = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const restore = async (req: Request, res: Response) => {
   try {
     const item = await itemService.restoreItem(req.params.id);
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: "Deleted item not found",
-      });
+      return sendError(res, new ItemServiceError(404, "Item not found"));
     }
 
-    res.json({
-      success: true,
-      message: "Item has been restored",
-      data: item,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    return sendSuccess(res, item, "Item restored");
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const permanentDelete = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const permanentDelete = async (req: Request, res: Response) => {
   try {
     await itemService.permanentDeleteItem(req.params.id);
-    res.json({
-      success: true,
-      message: "Item has been permanently deleted",
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    return sendSuccess(res, null, "Item permanently deleted");
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const getDeleted = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const getDeleted = async (_req: Request, res: Response) => {
   try {
     const items = await itemService.getDeletedItems();
-    res.json({
-      success: true,
-      data: items,
-    });
-  } catch (err: any) {
-    next(err);
+    return sendSuccess(res, items);
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const getUnavailable = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const getUnavailable = async (_req: Request, res: Response) => {
   try {
     const items = await itemService.getUnavailableItems();
-    res.json({
-      success: true,
-      data: items,
-    });
-  } catch (err: any) {
-    next(err);
+    return sendSuccess(res, items);
+  } catch (err) {
+    return sendError(res, err);
   }
 };
 
-export const availability = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const availability = async (req: Request, res: Response) => {
   try {
     const item = await itemService.updateAvailability(
       req.params.id,
@@ -238,17 +166,11 @@ export const availability = async (
     );
 
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: "Item not found",
-      });
+      return sendError(res, new ItemServiceError(404, "Item not found"));
     }
 
-    res.json({
-      success: true,
-      data: item,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    return sendSuccess(res, item, "Availability updated");
+  } catch (err) {
+    return sendError(res, err);
   }
 };

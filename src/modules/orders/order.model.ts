@@ -4,7 +4,6 @@ export type OrderStatus = "placed" | "served" | "completed";
 
 interface OrderItem {
   itemId: Schema.Types.ObjectId;
-  itemCodeSnapshot: string;
   typeSnapshot: "food" | "beverage";
   nameSnapshot: string;
   priceSnapshot: number;
@@ -37,7 +36,6 @@ const orderSchema = new Schema<OrderDoc>(
     items: [
       {
         itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
-        itemCodeSnapshot: { type: String, required: true },
         typeSnapshot: {
           type: String,
           enum: ["food", "beverage"],

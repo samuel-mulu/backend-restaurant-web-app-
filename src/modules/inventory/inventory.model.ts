@@ -1,27 +1,19 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export interface PurchaseRecord {
-  quantity: number;
-  purchaseDate: Date;
-  cost: number;
-  purchasedBy: Types.ObjectId;
-}
-
 export interface InventoryDoc extends Document {
   _id: Types.ObjectId;
-  id: string;
   name: string;
-  itemCode: string;
   description?: string;
-  categoryId?: Schema.Types.ObjectId;
+  categoryId?: Types.ObjectId;
   quantity: number;
   unit: string;
   minThreshold?: number;
-  lastPurchaseDate?: Date;
-  purchaseHistory: PurchaseRecord[];
   clientId?: string;
-  createdAt: Date;
-  updatedAt: Date;
+
+  /** Virtuals */
+  isLowStock: boolean;
+  stockStatus: "low" | "normal";
+  id: string; // virtual
 }
 
 const InventorySchema = new Schema<InventoryDoc>(
@@ -29,59 +21,82 @@ const InventorySchema = new Schema<InventoryDoc>(
     name: {
       type: String,
       required: true,
-      index: true,
-    },
-    itemCode: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
       trim: true,
-      uppercase: true,
+      index: true,
     },
+
     description: {
       type: String,
+      trim: true,
     },
+
     categoryId: {
       type: Schema.Types.ObjectId,
       ref: "Category",
       index: true,
     },
+
     quantity: {
       type: Number,
       required: true,
       min: 0,
       index: true,
     },
+
     unit: {
       type: String,
       required: true,
+      trim: true,
     },
+
     minThreshold: {
       type: Number,
+      default: 0,
       min: 0,
     },
-    lastPurchaseDate: {
-      type: Date,
+
+    clientId: {
+      type: String,
+      sparse: true,
+      index: true,
     },
-    purchaseHistory: [
-      {
-        quantity: { type: Number, required: true, min: 0 },
-        purchaseDate: { type: Date, required: true },
-        cost: { type: Number, required: true, min: 0 },
-        purchasedBy: {
-          type: Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-      },
-    ],
-    clientId: { type: String, sparse: true },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-// Indexes for performance
-InventorySchema.index({ "purchaseHistory.purchaseDate": -1 });
+/* ---------------------- VIRTUAL FIELDS ---------------------- */
 
+/**
+ * A virtual field for converting _id to string id
+ */
+InventorySchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
+
+/**
+ * Returns true if quantity <= minThreshold
+ */
+InventorySchema.virtual("isLowStock").get(function () {
+  return this.quantity <= (this.minThreshold ?? 0);
+});
+
+/**
+ * Returns a human-friendly stock status
+ * low / normal / overstock
+ */
+InventorySchema.virtual("stockStatus").get(function () {
+  const threshold = this.minThreshold ?? 0;
+  if (this.quantity <= threshold) return "low";
+  return "normal";
+});
+
+/* ---------------------- INDEXES ---------------------- */
+// Compound index for faster filtering by client + category
+InventorySchema.index({ clientId: 1, categoryId: 1 });
+
+/* ---------------------- EXPORT MODEL ---------------------- */
 export const Inventory = model<InventoryDoc>("Inventory", InventorySchema);

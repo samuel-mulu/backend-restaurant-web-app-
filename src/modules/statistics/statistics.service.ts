@@ -224,20 +224,17 @@ export interface ProductAnalytics {
   bestSellingItems: Array<{
     itemId: string;
     itemName: string;
-    itemCode: string;
     totalQty: number;
     revenue: number;
   }>;
   revenueByProduct: Array<{
     itemId: string;
     itemName: string;
-    itemCode: string;
     revenue: number;
   }>;
   productPerformance: Array<{
     itemId: string;
     itemName: string;
-    itemCode: string;
     date: string;
     qty: number;
     revenue: number;
@@ -270,7 +267,6 @@ export const getProductAnalytics = async (
     {
       $group: {
         _id: "$items.itemId",
-        itemCode: { $first: "$items.itemCodeSnapshot" },
         itemName: { $first: "$items.nameSnapshot" },
         totalQty: { $sum: "$items.qty" },
         revenue: {
@@ -283,7 +279,6 @@ export const getProductAnalytics = async (
     {
       $project: {
         itemId: "$_id",
-        itemCode: 1,
         itemName: 1,
         totalQty: 1,
         revenue: 1,
@@ -299,7 +294,6 @@ export const getProductAnalytics = async (
     {
       $group: {
         _id: "$items.itemId",
-        itemCode: { $first: "$items.itemCodeSnapshot" },
         itemName: { $first: "$items.nameSnapshot" },
         revenue: {
           $sum: { $multiply: ["$items.priceSnapshot", "$items.qty"] },
@@ -311,7 +305,6 @@ export const getProductAnalytics = async (
     {
       $project: {
         itemId: "$_id",
-        itemCode: 1,
         itemName: 1,
         revenue: 1,
         _id: 0,
@@ -329,7 +322,6 @@ export const getProductAnalytics = async (
           itemId: "$items.itemId",
           date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
         },
-        itemCode: { $first: "$items.itemCodeSnapshot" },
         itemName: { $first: "$items.nameSnapshot" },
         qty: { $sum: "$items.qty" },
         revenue: {
@@ -341,7 +333,6 @@ export const getProductAnalytics = async (
     {
       $project: {
         itemId: "$_id.itemId",
-        itemCode: 1,
         itemName: 1,
         date: "$_id.date",
         qty: 1,
@@ -505,17 +496,6 @@ export interface InventoryAnalyticsFilters {
 }
 
 export interface InventoryAnalytics {
-  consumptionTrends: Array<{
-    inventoryId: string;
-    inventoryName: string;
-    date: string;
-    quantity: number;
-  }>;
-  purchaseCosts: {
-    totalCost: number;
-    averageCost: number;
-    purchaseCount: number;
-  };
   stockLevels: Array<{
     inventoryId: string;
     inventoryName: string;
@@ -527,71 +507,6 @@ export interface InventoryAnalytics {
 export const getInventoryAnalytics = async (
   filters: InventoryAnalyticsFilters = {}
 ): Promise<InventoryAnalytics> => {
-  // Consumption trends from purchase history
-  const consumptionTrends = await Inventory.aggregate([
-    { $unwind: "$purchaseHistory" },
-    {
-      $match:
-        filters.startDate || filters.endDate
-          ? {
-              "purchaseHistory.purchaseDate": {
-                ...(filters.startDate && { $gte: filters.startDate }),
-                ...(filters.endDate && { $lte: filters.endDate }),
-              },
-            }
-          : {},
-    },
-    {
-      $group: {
-        _id: {
-          inventoryId: "$_id",
-          date: {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: "$purchaseHistory.purchaseDate",
-            },
-          },
-        },
-        inventoryName: { $first: "$name" },
-        quantity: { $sum: "$purchaseHistory.quantity" },
-      },
-    },
-    { $sort: { "_id.date": 1 } },
-    {
-      $project: {
-        inventoryId: { $toString: "$_id.inventoryId" },
-        inventoryName: 1,
-        date: "$_id.date",
-        quantity: 1,
-        _id: 0,
-      },
-    },
-  ]);
-
-  // Purchase costs
-  const purchaseCosts = await Inventory.aggregate([
-    { $unwind: "$purchaseHistory" },
-    {
-      $match:
-        filters.startDate || filters.endDate
-          ? {
-              "purchaseHistory.purchaseDate": {
-                ...(filters.startDate && { $gte: filters.startDate }),
-                ...(filters.endDate && { $lte: filters.endDate }),
-              },
-            }
-          : {},
-    },
-    {
-      $group: {
-        _id: null,
-        totalCost: { $sum: "$purchaseHistory.cost" },
-        averageCost: { $avg: "$purchaseHistory.cost" },
-        purchaseCount: { $sum: 1 },
-      },
-    },
-  ]);
-
   // Stock levels over time (simplified - would need historical tracking for accurate data)
   const stockLevels = await Inventory.aggregate([
     {
@@ -606,12 +521,6 @@ export const getInventoryAnalytics = async (
   ]);
 
   return {
-    consumptionTrends,
-    purchaseCosts: purchaseCosts[0] || {
-      totalCost: 0,
-      averageCost: 0,
-      purchaseCount: 0,
-    },
     stockLevels,
   };
 };

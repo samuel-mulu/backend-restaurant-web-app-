@@ -1,147 +1,64 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import * as categoryService from "./category.service";
-import { CategoryServiceError } from "./category.service";
 
-/**
- * Error handler for category operations
- * Provides consistent error response format
- */
-const handleError = (err: any, res: Response) => {
-  // Handle CategoryServiceError
-  if (err instanceof CategoryServiceError) {
-    return res.status(err.status).json({
-      success: false,
-      error: err.message,
-      code: err.code,
-    });
-  }
+const send = (res: Response, status: number, data: any) => {
+  return res.status(status).json({ success: true, ...data });
+};
 
-  // Handle validation errors
-  if (err.name === "ValidationError") {
-    return res.status(400).json({
-      success: false,
-      error: "Validation error",
-      details: Object.values(err.errors).map((e: any) => ({
-        field: e.path,
-        message: e.message,
-      })),
-    });
-  }
-
-  // Handle duplicate key errors (MongoDB unique index)
-  if (err.code === 11000) {
-    return res.status(409).json({
-      success: false,
-      error: "Category already exists",
-      code: "DUPLICATE_CATEGORY",
-    });
-  }
-
-  // Handle errors with status property
+const sendError = (res: Response, err: any) => {
   if (err.status) {
     return res.status(err.status).json({
       success: false,
-      error: err.message || "An error occurred",
+      message: err.message,
       code: err.code,
     });
   }
 
-  // Handle unexpected errors
-  console.error("Category controller error:", err);
+  console.error("Unexpected category message:", err);
   return res.status(500).json({
     success: false,
-    error: err.message || "Internal server error",
+    message: "Internal server error",
   });
 };
 
-/**
- * Creates a new category
- */
-export const create = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const create = async (req: Request, res: Response) => {
   try {
     const category = await categoryService.createCategory(req.body);
-    res.status(201).json({
-      success: true,
-      data: category,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    send(res, 201, { data: category });
+  } catch (err) {
+    sendError(res, err);
   }
 };
 
-/**
- * Lists all categories
- */
-export const list = async (req: Request, res: Response, next: NextFunction) => {
+export const list = async (req: Request, res: Response) => {
   try {
     const categories = await categoryService.listCategories();
-    res.json({
-      success: true,
-      data: categories,
-    });
-  } catch (err: any) {
-    next(err);
+    send(res, 200, { data: categories });
+  } catch (err) {
+    sendError(res, err);
   }
 };
 
-/**
- * Updates an existing category
- */
-export const update = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const update = async (req: Request, res: Response) => {
   try {
     const category = await categoryService.updateCategory(
       req.params.id,
       req.body
     );
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        error: "Category not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: category,
-    });
-  } catch (err: any) {
-    handleError(err, res);
+    send(res, 200, { data: category });
+  } catch (err) {
+    sendError(res, err);
   }
 };
 
-/**
- * Deletes a category
- */
-export const remove = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const remove = async (req: Request, res: Response) => {
   try {
     const category = await categoryService.removeCategory(req.params.id);
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        error: "Category not found",
-      });
-    }
-
-    res.json({
-      success: true,
+    send(res, 200, {
       message: "Category deleted successfully",
       data: category,
     });
-  } catch (err: any) {
-    handleError(err, res);
+  } catch (err) {
+    sendError(res, err);
   }
 };
