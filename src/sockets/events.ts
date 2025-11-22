@@ -39,7 +39,7 @@ export const notifyCashiersNewOrder = (
 
     console.log(
       "?? Sending new order notification to cashiers:",
-      payload.orderCode
+      payload.orderNumber
     );
 
     io.to("cashier:orders").emit("newOrder", {
@@ -85,17 +85,15 @@ export const notifyCustomerOrderUpdated = (
     const payload: PlainOrder = toPlainOrder(order);
 
     console.log(
-      `?? Sending order update for ${payload.orderCode}:`,
+      `?? Sending order update for ${payload.orderNumber}:`,
       payload.status
     );
 
     const baseUpdate = {
       id: payload._id,
       orderId: payload._id,
-      orderCode: payload.orderCode,
       orderNumber: payload.orderNumber,
       status: payload.status,
-      decidedAt: payload.decidedAt,
       order: payload,
     };
 
@@ -114,7 +112,6 @@ export const notifyCustomerOrderUpdated = (
       data: {
         orderId: payload._id,
         orderNumber: payload.orderNumber,
-        orderCode: payload.orderCode,
         status: payload.status,
         updatedFields,
       },
@@ -129,7 +126,6 @@ export const notifyCustomerOrderUpdated = (
         data: {
           orderId: payload._id,
           orderNumber: payload.orderNumber,
-          orderCode: payload.orderCode,
           status: payload.status,
           waiterId: payload.waiterId,
         },

@@ -1,10 +1,9 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type OrderStatus = "placed" | "served" | "completed";
+export type OrderStatus = "ordered" | "paid";
 
 interface OrderItem {
   itemId: Schema.Types.ObjectId;
-  typeSnapshot: "food" | "beverage";
   nameSnapshot: string;
   priceSnapshot: number;
   qty: number;
@@ -13,7 +12,6 @@ interface OrderItem {
 export interface OrderDoc extends Document {
   _id: Types.ObjectId;
   id: string;
-  orderCode: string;
   orderNumber: string;
   tableNumber: string;
   items: OrderItem[];
@@ -30,17 +28,11 @@ export interface OrderDoc extends Document {
 
 const orderSchema = new Schema<OrderDoc>(
   {
-    orderCode: { type: String, required: true, unique: true },
     orderNumber: { type: String, required: true, unique: true, index: true },
     tableNumber: { type: String, required: true },
     items: [
       {
         itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
-        typeSnapshot: {
-          type: String,
-          enum: ["food", "beverage"],
-          required: true,
-        },
         nameSnapshot: { type: String, required: true },
         priceSnapshot: { type: Number, required: true, min: 0 },
         qty: { type: Number, required: true, min: 1 },
@@ -50,8 +42,8 @@ const orderSchema = new Schema<OrderDoc>(
     totalAmount: { type: Number, required: true, min: 0 },
     status: {
       type: String,
-      enum: ["placed", "served", "completed"],
-      default: "placed",
+      enum: ["ordered", "paid"],
+      default: "ordered",
       index: true,
     },
     waiterId: { type: Schema.Types.ObjectId, ref: "User", index: true },
@@ -59,8 +51,38 @@ const orderSchema = new Schema<OrderDoc>(
     offlineId: String,
     clientId: { type: String, sparse: true, unique: true },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      versionKey: false,
+      transform: (_: any, ret: Record<string, any>) => {
+        delete ret._id;
+        // Remove categoryId from populated items if category is populated
+        if (ret.items && Array.isArray(ret.items)) {
+          ret.items = ret.items.map((item: any) => {
+            if (
+              item.itemId &&
+              typeof item.itemId === "object" &&
+              item.itemId.category
+            ) {
+              const { categoryId, ...itemRest } = item.itemId;
+              return { ...item, itemId: itemRest };
+            }
+            return item;
+          });
+        }
+        return ret;
+      },
+    },
+    toObject: { virtuals: true },
+  }
 );
+
+// Virtual for id
+orderSchema.virtual("id").get(function () {
+  return this._id.toHexString();
+});
 
 // Compound indexes for performance
 orderSchema.index({ status: 1, createdAt: -1 });

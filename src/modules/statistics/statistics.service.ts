@@ -39,7 +39,7 @@ export const getDashboardStats = async (
       {
         $match: {
           createdAt: { $gte: today },
-          status: { $in: ["completed", "served"] },
+          status: "paid",
         },
       },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
@@ -48,7 +48,7 @@ export const getDashboardStats = async (
       {
         $match: {
           createdAt: { $gte: weekAgo },
-          status: { $in: ["completed", "served"] },
+          status: "paid",
         },
       },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
@@ -57,7 +57,7 @@ export const getDashboardStats = async (
       {
         $match: {
           createdAt: { $gte: monthAgo },
-          status: { $in: ["completed", "served"] },
+          status: "paid",
         },
       },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
@@ -119,7 +119,7 @@ export const getSalesAnalytics = async (
   filters: SalesAnalyticsFilters = {}
 ): Promise<SalesAnalytics> => {
   const matchQuery: any = {
-    status: { $in: ["completed", "served"] },
+    status: "paid",
   };
 
   if (filters.startDate || filters.endDate) {
@@ -245,7 +245,7 @@ export const getProductAnalytics = async (
   filters: ProductAnalyticsFilters = {}
 ): Promise<ProductAnalytics> => {
   const matchQuery: any = {
-    status: { $in: ["completed", "served"] },
+    status: "paid",
   };
 
   if (filters.startDate || filters.endDate) {

@@ -6,9 +6,6 @@ import {
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
 
-const genCode = (prefix = "GAR") =>
-  `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-
 // Generate order number with date prefix and sequential number
 const generateOrderNumber = async (): Promise<string> => {
   const today = new Date();
@@ -38,7 +35,6 @@ export type CreateOrderInput = {
   tableNumber: string;
   items: {
     itemId: string;
-    typeSnapshot: "food" | "beverage";
     qty: number;
     nameSnapshot: string;
     priceSnapshot: number;
@@ -57,10 +53,11 @@ export const createOrder = async (
   if (payload.clientId) {
     const existing = await Order.findOne({ clientId: payload.clientId });
     if (existing) {
-      await existing.populate(
-        "items.itemId",
-        "name description price images isAvailable"
-      );
+      await existing.populate({
+        path: "items.itemId",
+        select: "name description price image isAvailable",
+        populate: { path: "category", select: "name" },
+      });
       await existing.populate("waiterId", "name email phone");
       await existing.populate("cashierId", "name email phone");
       return existing;
@@ -91,29 +88,28 @@ export const createOrder = async (
   const orderNumber = await generateOrderNumber();
 
   const order = await Order.create({
-    orderCode: genCode(),
     orderNumber,
     tableNumber: payload.tableNumber,
     items: payload.items.map((i) => ({
       itemId: new Types.ObjectId(i.itemId) as any,
-      typeSnapshot: i.typeSnapshot,
       qty: i.qty,
       nameSnapshot: i.nameSnapshot,
       priceSnapshot: i.priceSnapshot,
     })),
     note: payload.note,
     totalAmount: subtotal,
-    status: "placed",
+    status: "ordered",
     waiterId: new Types.ObjectId(payload.waiterId),
     cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
     clientId: payload.clientId,
   });
 
-  // Populate item details before returning
-  await order.populate(
-    "items.itemId",
-    "name description price images isAvailable ingredients"
-  );
+  // Populate item details with categories before returning
+  await order.populate({
+    path: "items.itemId",
+    select: "name description price image isAvailable",
+    populate: { path: "category", select: "name" },
+  });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
 
@@ -160,29 +156,30 @@ export const listOrders = async (
 
   return await Order.find(query)
     .sort({ createdAt: -1 })
-    .populate(
-      "items.itemId",
-      "name description price images isAvailable ingredients"
-    )
+    .populate({
+      path: "items.itemId",
+      select: "name description price image isAvailable",
+      populate: { path: "category", select: "name" },
+    })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
 };
 
 export const getOrder = async (id: string): Promise<OrderDoc | null> => {
   return await Order.findById(id)
-    .populate(
-      "items.itemId",
-      "name description price images isAvailable ingredients"
-    )
+    .populate({
+      path: "items.itemId",
+      select: "name description price image isAvailable",
+      populate: { path: "category", select: "name" },
+    })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
 };
 
-// Valid status transitions: placed → served → completed
+// Valid status transitions: ordered → paid
 const validStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
-  placed: ["served"],
-  served: ["completed"],
-  completed: [], // Terminal state
+  ordered: ["paid"],
+  paid: [], // Terminal state
 };
 
 export const updateOrderStatus = async (
@@ -211,11 +208,11 @@ export const updateOrderStatus = async (
     throw { status: 401, message: "User not found" };
   }
 
-  // Waiter can only update to served/completed
-  if (user.role === "waiter" && !["served", "completed"].includes(status)) {
+  // Waiter can only update to paid
+  if (user.role === "waiter" && status !== "paid") {
     throw {
       status: 403,
-      message: "Waiters can only update order status to served or completed",
+      message: "Waiters can only update order status to paid",
     };
   }
 
@@ -247,7 +244,6 @@ export interface UpdateOrderInput {
   notes?: string;
   items?: {
     itemId: string;
-    typeSnapshot: "food" | "beverage";
     qty: number;
     nameSnapshot: string;
     priceSnapshot: number;
@@ -268,7 +264,6 @@ export const updateOrder = async (
   if (data.items) {
     order.items = data.items.map((i) => ({
       itemId: new Types.ObjectId(i.itemId) as any,
-      typeSnapshot: i.typeSnapshot,
       qty: i.qty,
       nameSnapshot: i.nameSnapshot,
       priceSnapshot: i.priceSnapshot,
@@ -288,10 +283,11 @@ export const updateOrder = async (
 
   await order.save();
 
-  await order.populate(
-    "items.itemId",
-    "name description price images isAvailable ingredients"
-  );
+  await order.populate({
+    path: "items.itemId",
+    select: "name description price image isAvailable",
+    populate: { path: "category", select: "name" },
+  });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
 
@@ -303,10 +299,11 @@ export const getOrdersByWaiter = async (
 ): Promise<OrderDoc[]> => {
   return await Order.find({ waiterId: new Types.ObjectId(waiterId) })
     .sort({ createdAt: -1 })
-    .populate(
-      "items.itemId",
-      "name description price images isAvailable ingredients"
-    )
+    .populate({
+      path: "items.itemId",
+      select: "name description price image isAvailable",
+      populate: { path: "category", select: "name" },
+    })
     .populate("cashierId", "name email phone");
 };
 
@@ -315,19 +312,21 @@ export const getOrdersByCashier = async (
 ): Promise<OrderDoc[]> => {
   return await Order.find({ cashierId: new Types.ObjectId(cashierId) })
     .sort({ createdAt: -1 })
-    .populate(
-      "items.itemId",
-      "name description price images isAvailable ingredients"
-    )
+    .populate({
+      path: "items.itemId",
+      select: "name description price image isAvailable",
+      populate: { path: "category", select: "name" },
+    })
     .populate("waiterId", "name email phone");
 };
 
 export const markOrderAsPrinted = async (id: string) => {
   const order = await Order.findById(id)
-    .populate(
-      "items.itemId",
-      "name description price images isAvailable ingredients"
-    )
+    .populate({
+      path: "items.itemId",
+      select: "name description price image isAvailable",
+      populate: { path: "category", select: "name" },
+    })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
 
@@ -347,7 +346,7 @@ export async function printOrder(orderId: string) {
 
   // For now, just return the order
   // Printing functionality can be added later if needed
-  console.log(`[PRINT ORDER] Order ${order.orderCode} requested for printing`);
+  console.log(`[PRINT ORDER] Order ${order.orderNumber} requested for printing`);
 
   return order;
 }
