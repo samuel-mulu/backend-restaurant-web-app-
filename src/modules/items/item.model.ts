@@ -71,9 +71,16 @@ const ItemSchema = new Schema<ItemDoc>(
         delete ret._id;
         delete ret.isDeleted;
         delete ret.deletedAt;
-        // Remove categoryId if category is populated
+        // Remove categoryId if category is populated and convert category _id to id
         if (ret.category) {
           delete ret.categoryId;
+          // Convert category _id to id
+          if (ret.category._id) {
+            ret.category.id = ret.category._id.toString();
+            delete ret.category._id;
+          }
+          // Remove category internal fields
+          delete ret.category.isDeleted;
         }
         return ret;
       },
