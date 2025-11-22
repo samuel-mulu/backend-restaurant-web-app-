@@ -47,6 +47,8 @@ export const createOrderSchema = Joi.object({
 export const updateOrderSchema = Joi.object({
   discount: Joi.number().min(0).optional(),
   notes: Joi.string().optional(),
+  note: Joi.string().optional(),
+  tableNumber: Joi.string().optional(),
   items: Joi.array()
     .items(
       Joi.object({

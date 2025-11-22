@@ -7,12 +7,12 @@ const router = Router();
 
 // public
 router.get("/", ctrl.list);
-// admin - specific routes must come before parameterized routes
+// owner - specific routes must come before parameterized routes
 router.get("/deleted", ctrl.getDeleted);
 router.get("/unavailable", ctrl.getUnavailable);
 router.get("/:id", ctrl.get);
 
-// admin
+// owner
 router.post("/", uploadImageMiddleware.single("image"), ctrl.create as any);
 router.patch("/:id", uploadImageMiddleware.single("image"), ctrl.update as any);
 router.delete("/:id", ctrl.remove);

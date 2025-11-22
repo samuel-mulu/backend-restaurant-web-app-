@@ -10,7 +10,7 @@ const router = Router();
 // public (customer) can list categories
 router.get("/", ctrl.list);
 
-// admin only for CRUD
+// owner only for CRUD
 router.post("/", ctrl.create);
 router.patch("/:id", ctrl.update);
 router.delete("/:id", ctrl.remove);

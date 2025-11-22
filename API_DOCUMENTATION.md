@@ -601,10 +601,9 @@ The system uses professional accounting-friendly status names for cash flow trac
 
 ### Client Events (Emit)
 
-- `join-admin`: Join admin rooms
+- `join-owner`: Join owner rooms
 - `join-cashier`: Join cashier rooms
 - `join-waiter`: Join waiter room (requires waiterId)
-- `join-owner`: Join owner rooms
 - `join-customer`: Join customer channel (requires channel ID)
 - `subscribe-orders`: Subscribe to general order events
 

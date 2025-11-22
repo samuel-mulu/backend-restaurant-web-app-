@@ -4,7 +4,7 @@ import { requireAuth } from "../../common/middleware/authMiddleware";
 
 const router = Router();
 
-// All notification routes require authentication (cashier or admin)
+// All notification routes require authentication (cashier or owner)
 router.use(requireAuth);
 
 // Get notifications for a user
@@ -16,7 +16,7 @@ router.patch("/:id/read", notificationCtrl.markAsRead);
 // Mark all notifications as read for a user
 router.patch("/user/:userId/read-all", notificationCtrl.markAllAsRead);
 
-// Create a notification (admin only)
+// Create a notification (owner only)
 router.post("/", notificationCtrl.createNotification);
 
 // Delete a notification

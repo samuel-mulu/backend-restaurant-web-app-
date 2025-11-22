@@ -61,34 +61,47 @@ export const register = async (
       return;
     }
 
+    // Registration is owner-only - require owner authentication
     const token = getAccessToken(req);
 
-    if (token) {
-      const decoded = verifyAccessToken(token);
-      if (!decoded) {
-        res.status(401).json({
-          success: false,
-          message: "Token expired or invalid token used",
-        });
-        return;
-      }
-      if (decoded.role !== "owner") {
-        res.status(403).json({
-          success: false,
-          message: "Access denied",
-          details: [
-            { message: "You don't have permission to perform this action" },
-          ],
-        });
-        return;
-      }
-    } else if (role && role !== "cashier") {
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        details: [
+          {
+            message:
+              "Only owner can create staff accounts. Please login first.",
+          },
+        ],
+      });
+      return;
+    }
+
+    const decoded = verifyAccessToken(token);
+    if (!decoded) {
+      res.status(401).json({
+        success: false,
+        message: "Token expired or invalid token used",
+      });
+      return;
+    }
+
+    if (decoded.role !== "owner") {
       res.status(403).json({
         success: false,
         message: "Access denied",
-        details: [
-          { message: "You don't have permission to perform this action" },
-        ],
+        details: [{ message: "Only owner can create staff accounts" }],
+      });
+      return;
+    }
+
+    // Ensure only cashier or waiter roles can be created
+    if (role && role !== "cashier" && role !== "waiter") {
+      res.status(403).json({
+        success: false,
+        message: "Access denied",
+        details: [{ message: "Only cashier and waiter roles can be created" }],
       });
       return;
     }
@@ -129,7 +142,7 @@ export const register = async (
       email: email ? email.toLowerCase().trim() : undefined,
       phone: phone.trim(),
       password: hashed,
-      role: role || "cashier",
+      role: role || "cashier", // Default to cashier if not specified
     });
 
     res.status(201).json({
@@ -402,4 +415,119 @@ export const profile = async (req: Request, res: Response) => {
   }
 
   res.json(req.user);
+};
+
+export const updateProfile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const { name, email, phone } = req.body;
+    const userRole = req.user.role;
+
+    // Determine which fields can be updated based on role
+    const updateData: { name?: string; email?: string; phone?: string } = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined && userRole === "owner") {
+      updateData.phone = phone;
+    }
+
+    const updatedUser = await svc.updateUserProfile(
+      req.user.id,
+      updateData,
+      userRole
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+      },
+    });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
+  }
+};
+
+export const changePassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    await svc.changeUserPassword(req.user.id, currentPassword, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
+  }
+};
+
+export const resetStaffPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    await svc.resetStaffPassword(id, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: "Staff password reset successfully",
+    });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
+  }
 };

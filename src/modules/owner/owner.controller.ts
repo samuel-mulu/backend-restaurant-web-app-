@@ -207,7 +207,7 @@ export const resetUserPassword = async (req: Request, res: Response) => {
   }
 };
 
-// Get recent orders for admin overview
+// Get recent orders for owner overview
 export const getRecentOrders = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
@@ -227,7 +227,7 @@ export const getRecentOrders = async (req: Request, res: Response) => {
   }
 };
 
-// Get all orders for admin management
+// Get all orders for owner management
 export const getAllOrders = async (_req: Request, res: Response) => {
   try {
     const orders = await orderService.listOrders();
@@ -238,7 +238,7 @@ export const getAllOrders = async (_req: Request, res: Response) => {
   }
 };
 
-// Accept order (admin can also accept orders)
+// Accept order (owner can also accept orders)
 export const acceptOrder = async (req: Request, res: Response) => {
   try {
     const order = await orderService.updateOrderStatus(
@@ -255,7 +255,7 @@ export const acceptOrder = async (req: Request, res: Response) => {
   }
 };
 
-// Reject order (admin can also reject orders)
+// Reject order (owner can also reject orders)
 export const rejectOrder = async (req: Request, res: Response) => {
   try {
     const order = await orderService.updateOrderStatus(
@@ -271,3 +271,4 @@ export const rejectOrder = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to reject order" });
   }
 };
+

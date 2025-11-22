@@ -20,6 +20,42 @@ router.get("/", requireAuth, orderCtrl.list);
 router.get("/waiter/:waiterId", requireAuth, orderCtrl.getByWaiter);
 router.get("/cashier/:cashierId", requireAuth, orderCtrl.getByCashier);
 
+// Report routes (Owner only) - must be before /:id route
+router.get(
+  "/reports/daily",
+  requireAuth,
+  requireRole("owner"),
+  orderCtrl.getDailyReport
+);
+
+router.get(
+  "/reports/cashier/:cashierId",
+  requireAuth,
+  requireRole("owner"),
+  orderCtrl.getCashierReport
+);
+
+router.get(
+  "/reports/waiter/:waiterId",
+  requireAuth,
+  requireRole("owner"),
+  orderCtrl.getWaiterReport
+);
+
+router.get(
+  "/reports/status",
+  requireAuth,
+  requireRole("owner"),
+  orderCtrl.getStatusReport
+);
+
+router.get(
+  "/reports/date-range",
+  requireAuth,
+  requireRole("owner"),
+  orderCtrl.getDateRangeReport
+);
+
 // Update order status (Cashier/Owner can update)
 router.patch(
   "/:id/status",

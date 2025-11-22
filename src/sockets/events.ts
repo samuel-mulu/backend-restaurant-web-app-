@@ -28,7 +28,7 @@ function toPlainOrder(order: OrderDoc): Record<string, any> {
   return plain;
 }
 
-// Notify cashiers and admins of new orders
+// Notify cashiers and owners of new orders
 export const notifyCashiersNewOrder = (
   order: OrderDoc,
   source: EventSource = "api"
@@ -49,7 +49,7 @@ export const notifyCashiersNewOrder = (
       source,
     });
 
-    io.to("admin:orders").emit("orderCreated", {
+    io.to("owner:orders").emit("orderCreated", {
       type: "order_created",
       data: payload,
       timestamp: new Date(),
@@ -67,7 +67,7 @@ export const notifyCashiersNewOrder = (
   }
 };
 
-// Notify customer and admin clients of order status updates
+// Notify customer and owner clients of order status updates
 export const notifyCustomerOrderUpdated = (
   order: OrderDoc,
   {
@@ -134,7 +134,7 @@ export const notifyCustomerOrderUpdated = (
       });
     }
 
-    io.to("admin:orders").emit("orderUpdated", {
+    io.to("owner:orders").emit("orderUpdated", {
       type: "order_updated",
       data: payload,
       meta: {
@@ -184,7 +184,7 @@ export const broadcastOrderStats = (stats: {
     const io = getIO();
     console.log("📊 Broadcasting order statistics:", stats);
 
-    io.to("admin:orders").emit("orderStats", {
+    io.to("owner:orders").emit("orderStats", {
       type: "order_statistics",
       data: stats,
       timestamp: new Date(),
@@ -227,14 +227,14 @@ export const notifyItemCreated = (itemData: {
     const io = getIO();
     console.log("🔔 Broadcasting new item created:", itemData.name);
 
-    io.to("admin:items").emit("itemCreated", {
+    io.to("owner:items").emit("itemCreated", {
       type: "item_created",
       data: itemData,
       timestamp: new Date(),
       source: "api",
     });
 
-    io.to("admin:orders").emit("itemCreated", {
+    io.to("owner:orders").emit("itemCreated", {
       type: "item_created",
       data: itemData,
       timestamp: new Date(),
@@ -256,7 +256,7 @@ export const notifyItemUpdated = (itemData: {
     const io = getIO();
     console.log("🔔 Broadcasting item updated:", itemData.name);
 
-    io.to("admin:items").emit("itemUpdated", {
+    io.to("owner:items").emit("itemUpdated", {
       type: "item_updated",
       data: itemData,
       timestamp: new Date(),
@@ -265,7 +265,7 @@ export const notifyItemUpdated = (itemData: {
 
     // If availability changed, notify orders room
     if (itemData.isAvailable !== undefined) {
-      io.to("admin:orders").emit("itemAvailabilityChanged", {
+      io.to("owner:orders").emit("itemAvailabilityChanged", {
         type: "item_availability_changed",
         data: itemData,
         timestamp: new Date(),
@@ -282,14 +282,14 @@ export const notifyItemDeleted = (itemData: { id: string; name: string }) => {
     const io = getIO();
     console.log("🔔 Broadcasting item deleted:", itemData.name);
 
-    io.to("admin:items").emit("itemDeleted", {
+    io.to("owner:items").emit("itemDeleted", {
       type: "item_deleted",
       data: itemData,
       timestamp: new Date(),
       source: "api",
     });
 
-    io.to("admin:orders").emit("itemDeleted", {
+    io.to("owner:orders").emit("itemDeleted", {
       type: "item_deleted",
       data: itemData,
       timestamp: new Date(),
@@ -310,14 +310,14 @@ export const notifyCategoryCreated = (categoryData: {
     const io = getIO();
     console.log("🔔 Broadcasting new category created:", categoryData.name);
 
-    io.to("admin:categories").emit("categoryCreated", {
+    io.to("owner:categories").emit("categoryCreated", {
       type: "category_created",
       data: categoryData,
       timestamp: new Date(),
       source: "api",
     });
 
-    io.to("admin:items").emit("categoryCreated", {
+    io.to("owner:items").emit("categoryCreated", {
       type: "category_created",
       data: categoryData,
       timestamp: new Date(),
@@ -338,14 +338,14 @@ export const notifyCategoryUpdated = (categoryData: {
     const io = getIO();
     console.log("🔔 Broadcasting category updated:", categoryData.name);
 
-    io.to("admin:categories").emit("categoryUpdated", {
+    io.to("owner:categories").emit("categoryUpdated", {
       type: "category_updated",
       data: categoryData,
       timestamp: new Date(),
       source: "api",
     });
 
-    io.to("admin:items").emit("categoryUpdated", {
+    io.to("owner:items").emit("categoryUpdated", {
       type: "category_updated",
       data: categoryData,
       timestamp: new Date(),
@@ -364,14 +364,14 @@ export const notifyCategoryDeleted = (categoryData: {
     const io = getIO();
     console.log("🔔 Broadcasting category deleted:", categoryData.name);
 
-    io.to("admin:categories").emit("categoryDeleted", {
+    io.to("owner:categories").emit("categoryDeleted", {
       type: "category_deleted",
       data: categoryData,
       timestamp: new Date(),
       source: "api",
     });
 
-    io.to("admin:items").emit("categoryDeleted", {
+    io.to("owner:items").emit("categoryDeleted", {
       type: "category_deleted",
       data: categoryData,
       timestamp: new Date(),
@@ -393,7 +393,7 @@ export const notifyUserCreated = (userData: {
     const io = getIO();
     console.log("🔔 Broadcasting new user created:", userData.name);
 
-    io.to("admin:users").emit("userCreated", {
+    io.to("owner:users").emit("userCreated", {
       type: "user_created",
       data: userData,
       timestamp: new Date(),
@@ -415,7 +415,7 @@ export const broadcastAnalyticsUpdate = (analyticsData: {
     const io = getIO();
     console.log("📊 Broadcasting analytics update");
 
-    io.to("admin:dashboard").emit("analyticsUpdate", {
+    io.to("owner:dashboard").emit("analyticsUpdate", {
       type: "analytics_update",
       data: analyticsData,
       timestamp: new Date(),
@@ -454,7 +454,7 @@ export const notifyInventoryLowStock = (inventoryData: {
       source: "api",
     });
 
-    io.to("admin:inventory").emit("inventory:low:stock", {
+    io.to("owner:inventory").emit("inventory:low:stock", {
       type: "inventory_low_stock",
       data: inventoryData,
       timestamp: new Date(),
@@ -483,7 +483,7 @@ export const broadcastStatisticsUpdate = (stats: {
       source: "api",
     });
 
-    io.to("admin:dashboard").emit("statistics:updated", {
+    io.to("owner:dashboard").emit("statistics:updated", {
       type: "statistics_updated",
       data: stats,
       timestamp: new Date(),

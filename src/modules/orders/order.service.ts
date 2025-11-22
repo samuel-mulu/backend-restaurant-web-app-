@@ -548,3 +548,364 @@ export const cancelOrder = async (
 
   return order;
 };
+
+// Report Functions
+
+export interface DailyReport {
+  date: Date;
+  totalOrders: number;
+  totalRevenue: number;
+  totalCollected: number;
+  totalTransferred: number;
+  totalConfirmed: number;
+  totalVoided: number;
+  ordersByStatus: {
+    OPEN: number;
+    VOIDED: number;
+    PAID_TO_CASHIER: number;
+    TRANSFERRED_TO_OWNER: number;
+    OWNER_CONFIRMED: number;
+    DISPUTED: number;
+  };
+}
+
+export const getDailyReport = async (date?: Date): Promise<DailyReport> => {
+  const targetDate = date || new Date();
+  const startOfDay = new Date(targetDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(targetDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const orders = await Order.find({
+    createdAt: { $gte: startOfDay, $lte: endOfDay },
+  });
+
+  const totalOrders = orders.length;
+  const totalRevenue = orders.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const paidToCashier = orders.filter(
+    (o) =>
+      o.status === "PAID_TO_CASHIER" ||
+      o.status === "TRANSFERRED_TO_OWNER" ||
+      o.status === "OWNER_CONFIRMED"
+  );
+  const totalCollected = paidToCashier.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const transferred = orders.filter(
+    (o) => o.status === "TRANSFERRED_TO_OWNER" || o.status === "OWNER_CONFIRMED"
+  );
+  const totalTransferred = transferred.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const confirmed = orders.filter((o) => o.status === "OWNER_CONFIRMED");
+  const totalConfirmed = confirmed.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const totalVoided = orders.filter((o) => o.status === "VOIDED").length;
+
+  const ordersByStatus = {
+    OPEN: orders.filter((o) => o.status === "OPEN").length,
+    VOIDED: orders.filter((o) => o.status === "VOIDED").length,
+    PAID_TO_CASHIER: orders.filter((o) => o.status === "PAID_TO_CASHIER")
+      .length,
+    TRANSFERRED_TO_OWNER: orders.filter(
+      (o) => o.status === "TRANSFERRED_TO_OWNER"
+    ).length,
+    OWNER_CONFIRMED: orders.filter((o) => o.status === "OWNER_CONFIRMED")
+      .length,
+    DISPUTED: orders.filter((o) => o.status === "DISPUTED").length,
+  };
+
+  return {
+    date: targetDate,
+    totalOrders,
+    totalRevenue,
+    totalCollected,
+    totalTransferred,
+    totalConfirmed,
+    totalVoided,
+    ordersByStatus,
+  };
+};
+
+export interface CashierReport {
+  cashierId: string;
+  cashierName?: string;
+  totalOrders: number;
+  totalCollected: number;
+  totalTransferred: number;
+  ordersCreated: number;
+  ordersCollected: number;
+  ordersTransferred: number;
+}
+
+export const getCashierReport = async (
+  cashierId: string,
+  startDate?: Date,
+  endDate?: Date
+): Promise<CashierReport> => {
+  const query: any = { cashierId: new Types.ObjectId(cashierId) };
+
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) {
+      query.createdAt.$gte = startDate;
+    }
+    if (endDate) {
+      query.createdAt.$lte = endDate;
+    }
+  }
+
+  const orders = await Order.find(query).populate(
+    "cashierId",
+    "name email phone"
+  );
+
+  const cashier = orders.length > 0 ? orders[0].cashierId : null;
+  const cashierName =
+    cashier && typeof cashier === "object" ? (cashier as any).name : undefined;
+
+  const ordersCreated = orders.length;
+
+  const collectedOrders = orders.filter(
+    (o) =>
+      o.status === "PAID_TO_CASHIER" ||
+      o.status === "TRANSFERRED_TO_OWNER" ||
+      o.status === "OWNER_CONFIRMED"
+  );
+  const totalCollected = collectedOrders.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const transferredOrders = orders.filter(
+    (o) => o.status === "TRANSFERRED_TO_OWNER" || o.status === "OWNER_CONFIRMED"
+  );
+  const totalTransferred = transferredOrders.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const ordersWithStatus = await Order.find({
+    $or: [
+      { cashierId: new Types.ObjectId(cashierId) },
+      { transferredToOwnerBy: new Types.ObjectId(cashierId) },
+    ],
+    ...(startDate || endDate
+      ? {
+          createdAt: {
+            ...(startDate ? { $gte: startDate } : {}),
+            ...(endDate ? { $lte: endDate } : {}),
+          },
+        }
+      : {}),
+  });
+
+  return {
+    cashierId,
+    cashierName,
+    totalOrders: ordersWithStatus.length,
+    totalCollected,
+    totalTransferred,
+    ordersCreated,
+    ordersCollected: collectedOrders.length,
+    ordersTransferred: transferredOrders.length,
+  };
+};
+
+export interface WaiterReport {
+  waiterId: string;
+  waiterName?: string;
+  totalOrders: number;
+  totalSales: number;
+  averageOrderValue: number;
+}
+
+export const getWaiterReport = async (
+  waiterId: string,
+  startDate?: Date,
+  endDate?: Date
+): Promise<WaiterReport> => {
+  const query: any = { waiterId: new Types.ObjectId(waiterId) };
+
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) {
+      query.createdAt.$gte = startDate;
+    }
+    if (endDate) {
+      query.createdAt.$lte = endDate;
+    }
+  }
+
+  const orders = await Order.find(query).populate(
+    "waiterId",
+    "name email phone"
+  );
+
+  const waiter = orders.length > 0 ? orders[0].waiterId : null;
+  const waiterName =
+    waiter && typeof waiter === "object" ? (waiter as any).name : undefined;
+
+  const totalOrders = orders.length;
+  const totalSales = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+  return {
+    waiterId,
+    waiterName,
+    totalOrders,
+    totalSales,
+    averageOrderValue,
+  };
+};
+
+export interface StatusReport {
+  statusCounts: {
+    OPEN: number;
+    VOIDED: number;
+    PAID_TO_CASHIER: number;
+    TRANSFERRED_TO_OWNER: number;
+    OWNER_CONFIRMED: number;
+    DISPUTED: number;
+  };
+  totalOrders: number;
+}
+
+export const getStatusReport = async (
+  startDate?: Date,
+  endDate?: Date
+): Promise<StatusReport> => {
+  const query: any = {};
+
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) {
+      query.createdAt.$gte = startDate;
+    }
+    if (endDate) {
+      query.createdAt.$lte = endDate;
+    }
+  }
+
+  const orders = await Order.find(query);
+
+  const statusCounts = {
+    OPEN: orders.filter((o) => o.status === "OPEN").length,
+    VOIDED: orders.filter((o) => o.status === "VOIDED").length,
+    PAID_TO_CASHIER: orders.filter((o) => o.status === "PAID_TO_CASHIER")
+      .length,
+    TRANSFERRED_TO_OWNER: orders.filter(
+      (o) => o.status === "TRANSFERRED_TO_OWNER"
+    ).length,
+    OWNER_CONFIRMED: orders.filter((o) => o.status === "OWNER_CONFIRMED")
+      .length,
+    DISPUTED: orders.filter((o) => o.status === "DISPUTED").length,
+  };
+
+  return {
+    statusCounts,
+    totalOrders: orders.length,
+  };
+};
+
+export interface DateRangeReport {
+  startDate: Date;
+  endDate: Date;
+  totalOrders: number;
+  totalRevenue: number;
+  totalCollected: number;
+  totalTransferred: number;
+  totalConfirmed: number;
+  totalVoided: number;
+  ordersByStatus: {
+    OPEN: number;
+    VOIDED: number;
+    PAID_TO_CASHIER: number;
+    TRANSFERRED_TO_OWNER: number;
+    OWNER_CONFIRMED: number;
+    DISPUTED: number;
+  };
+}
+
+export const getDateRangeReport = async (
+  startDate: Date,
+  endDate: Date
+): Promise<DateRangeReport> => {
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  const orders = await Order.find({
+    createdAt: { $gte: start, $lte: end },
+  });
+
+  const totalOrders = orders.length;
+  const totalRevenue = orders.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const paidToCashier = orders.filter(
+    (o) =>
+      o.status === "PAID_TO_CASHIER" ||
+      o.status === "TRANSFERRED_TO_OWNER" ||
+      o.status === "OWNER_CONFIRMED"
+  );
+  const totalCollected = paidToCashier.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const transferred = orders.filter(
+    (o) => o.status === "TRANSFERRED_TO_OWNER" || o.status === "OWNER_CONFIRMED"
+  );
+  const totalTransferred = transferred.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const confirmed = orders.filter((o) => o.status === "OWNER_CONFIRMED");
+  const totalConfirmed = confirmed.reduce(
+    (sum, order) => sum + order.totalAmount,
+    0
+  );
+
+  const totalVoided = orders.filter((o) => o.status === "VOIDED").length;
+
+  const ordersByStatus = {
+    OPEN: orders.filter((o) => o.status === "OPEN").length,
+    VOIDED: orders.filter((o) => o.status === "VOIDED").length,
+    PAID_TO_CASHIER: orders.filter((o) => o.status === "PAID_TO_CASHIER")
+      .length,
+    TRANSFERRED_TO_OWNER: orders.filter(
+      (o) => o.status === "TRANSFERRED_TO_OWNER"
+    ).length,
+    OWNER_CONFIRMED: orders.filter((o) => o.status === "OWNER_CONFIRMED")
+      .length,
+    DISPUTED: orders.filter((o) => o.status === "DISPUTED").length,
+  };
+
+  return {
+    startDate: start,
+    endDate: end,
+    totalOrders,
+    totalRevenue,
+    totalCollected,
+    totalTransferred,
+    totalConfirmed,
+    totalVoided,
+    ordersByStatus,
+  };
+};

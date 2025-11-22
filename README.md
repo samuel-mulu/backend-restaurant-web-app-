@@ -521,7 +521,7 @@ const socket = io("http://localhost:5000", {
 
 ```javascript
 socket.emit("join-owner");
-// Subscribes to: owner:inventory, owner:dashboard, admin:orders
+// Subscribes to: owner:inventory, owner:dashboard, owner:orders
 ```
 
 #### Cashier
