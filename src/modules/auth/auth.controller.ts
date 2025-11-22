@@ -26,12 +26,25 @@ function timingEqualizer(ms = 120) {
 
 // --- Controller ------------------------------------------------------------
 
-export const register = async (
+export const createStaff = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
+    // Registration is owner-only - require owner authentication
+    const authUser = req.user;
+    if (!authUser) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        details: [
+          { message: "Please log in with a valid account to continue." },
+        ],
+      });
+      return;
+    }
+
     const { name, email, password, role, phone } = req.body;
 
     if (!name) {
@@ -57,41 +70,6 @@ export const register = async (
         success: false,
         message: "Validation failed",
         details: [{ field: "password", message: "password is required" }],
-      });
-      return;
-    }
-
-    // Registration is owner-only - require owner authentication
-    const token = getAccessToken(req);
-
-    if (!token) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication required",
-        details: [
-          {
-            message:
-              "Only owner can create staff accounts. Please login first.",
-          },
-        ],
-      });
-      return;
-    }
-
-    const decoded = verifyAccessToken(token);
-    if (!decoded) {
-      res.status(401).json({
-        success: false,
-        message: "Token expired or invalid token used",
-      });
-      return;
-    }
-
-    if (decoded.role !== "owner") {
-      res.status(403).json({
-        success: false,
-        message: "Access denied",
-        details: [{ message: "Only owner can create staff accounts" }],
       });
       return;
     }
@@ -154,7 +132,7 @@ export const register = async (
         phone: user.phone,
         role: user.role,
       },
-      message: "Registration successful. Please login to access your account.",
+      message: "You have created a staff account.",
     });
     return;
   } catch (err: any) {

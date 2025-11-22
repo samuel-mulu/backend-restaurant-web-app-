@@ -5,7 +5,10 @@ import {
   requireAuth,
   requireRole,
 } from "../../common/middleware/authMiddleware";
-import { authLimiter, sensitiveEndpointLimiter } from "../../common/middleware/rateLimiter";
+import {
+  authLimiter,
+  sensitiveEndpointLimiter,
+} from "../../common/middleware/rateLimiter";
 import { validate } from "../../common/middleware/validate";
 import {
   updateOwnerProfileSchema,
@@ -16,7 +19,12 @@ import {
 
 const router = Router();
 
-router.post("/register", sensitiveEndpointLimiter, requireOwner, ctrl.register);
+router.post(
+  "/create-staff",
+  sensitiveEndpointLimiter,
+  requireOwner,
+  ctrl.createStaff
+);
 router.post("/login", authLimiter, ctrl.login);
 router.post("/logout", ctrl.logout);
 router.post("/refresh", ctrl.refreshToken);
@@ -25,7 +33,6 @@ router.patch(
   "/profile",
   requireAuth,
   (req: any, res: any, next: any) => {
-    // Use different schema based on user role
     const schema =
       req.user?.role === "owner"
         ? updateOwnerProfileSchema
