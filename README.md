@@ -410,10 +410,9 @@ requireWaiter;
 
 ### Authentication Module (`/auth`)
 
-- User registration and login
+- User registration and login (phone number based)
 - JWT token generation and refresh
 - Password hashing and validation
-- Account lockout after failed attempts
 - Session management
 
 ### Order Management (`/orders`)
@@ -590,17 +589,13 @@ The application uses MongoDB change streams to automatically detect database cha
 ```typescript
 {
   name: string;
-  email: string (unique);
+  email?: string (optional, unique if provided);
   password: string (hashed);
   role: "owner" | "cashier" | "waiter";
-  phone: string (unique);
+  phone: string (unique, required);
   salary?: number;
   status: "active" | "inactive";
   isActive: boolean;
-  failedLoginCount?: number;
-  lockUntil?: Date;
-  lastLogin?: Date;
-  tokenVersion: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -703,9 +698,8 @@ The application uses MongoDB change streams to automatically detect database cha
 
 - **Password Hashing**: bcryptjs with salt rounds
 - **JWT Tokens**: Secure token generation with expiration
-- **Account Lockout**: Automatic lockout after failed login attempts
-- **Token Versioning**: Token invalidation on password change
 - **HTTP-only Cookies**: Refresh tokens stored securely
+- **Phone Number Authentication**: Login using phone number as primary identifier
 
 ### API Security
 

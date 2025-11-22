@@ -147,3 +147,21 @@ export const printOrder = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const cancel = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const order = await orderService.cancelOrder(req.params.id, req.user._id);
+    res.json({ success: true, data: order });
+  } catch (error: any) {
+    console.error("Error cancelling order:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to cancel order" });
+  }
+};

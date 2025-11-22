@@ -69,6 +69,13 @@ export const updateOrderSchema = Joi.object({
 
 export const updateOrderStatusSchema = Joi.object({
   status: Joi.string()
-    .valid("ordered", "paid")
+    .valid(
+      "OPEN",
+      "VOIDED",
+      "PAID_TO_CASHIER",
+      "TRANSFERRED_TO_OWNER",
+      "OWNER_CONFIRMED",
+      "DISPUTED"
+    )
     .required(),
 });

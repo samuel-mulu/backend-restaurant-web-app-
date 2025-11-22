@@ -6,6 +6,14 @@ import {
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
 
+// Helper function to populate user tracking fields
+const populateUserTrackingFields = async (order: OrderDoc): Promise<void> => {
+  await order.populate("cancelledBy", "name email phone");
+  await order.populate("transferredToOwnerBy", "name email phone");
+  await order.populate("confirmedBy", "name email phone");
+  await order.populate("disputedBy", "name email phone");
+};
+
 // Generate order number with date prefix and sequential number
 const generateOrderNumber = async (): Promise<string> => {
   const today = new Date();
@@ -60,6 +68,7 @@ export const createOrder = async (
       });
       await existing.populate("waiterId", "name email phone");
       await existing.populate("cashierId", "name email phone");
+      await populateUserTrackingFields(existing);
       return existing;
     }
   }
@@ -98,7 +107,8 @@ export const createOrder = async (
     })),
     note: payload.note,
     totalAmount: subtotal,
-    status: "ordered",
+    status: "OPEN",
+    placedAt: new Date(),
     waiterId: new Types.ObjectId(payload.waiterId),
     cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
     clientId: payload.clientId,
@@ -112,6 +122,7 @@ export const createOrder = async (
   });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
+  await populateUserTrackingFields(order);
 
   // Broadcast the new order
   notifyCashiersNewOrder(order);
@@ -154,7 +165,7 @@ export const listOrders = async (
     }
   }
 
-  return await Order.find(query)
+  const orders = await Order.find(query)
     .sort({ createdAt: -1 })
     .populate({
       path: "items.itemId",
@@ -162,24 +173,40 @@ export const listOrders = async (
       populate: { path: "category", select: "name" },
     })
     .populate("waiterId", "name email phone")
-    .populate("cashierId", "name email phone");
+    .populate("cashierId", "name email phone")
+    .populate("cancelledBy", "name email phone")
+    .populate("transferredToOwnerBy", "name email phone")
+    .populate("confirmedBy", "name email phone")
+    .populate("disputedBy", "name email phone");
+
+  return orders;
 };
 
 export const getOrder = async (id: string): Promise<OrderDoc | null> => {
-  return await Order.findById(id)
+  const order = await Order.findById(id)
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
       populate: { path: "category", select: "name" },
     })
     .populate("waiterId", "name email phone")
-    .populate("cashierId", "name email phone");
+    .populate("cashierId", "name email phone")
+    .populate("cancelledBy", "name email phone")
+    .populate("transferredToOwnerBy", "name email phone")
+    .populate("confirmedBy", "name email phone")
+    .populate("disputedBy", "name email phone");
+
+  return order;
 };
 
-// Valid status transitions: ordered → paid
+// Valid status transitions
 const validStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
-  ordered: ["paid"],
-  paid: [], // Terminal state
+  OPEN: ["VOIDED", "PAID_TO_CASHIER"],
+  VOIDED: [], // Terminal state
+  PAID_TO_CASHIER: ["TRANSFERRED_TO_OWNER", "DISPUTED"],
+  TRANSFERRED_TO_OWNER: ["OWNER_CONFIRMED", "DISPUTED"],
+  DISPUTED: ["PAID_TO_CASHIER", "TRANSFERRED_TO_OWNER"],
+  OWNER_CONFIRMED: [], // Terminal state
 };
 
 export const updateOrderStatus = async (
@@ -208,23 +235,103 @@ export const updateOrderStatus = async (
     throw { status: 401, message: "User not found" };
   }
 
-  // Waiter can only update to paid
-  if (user.role === "waiter" && status !== "paid") {
+  // Waiter has no status update permissions (manual cash collection only)
+  if (user.role === "waiter") {
     throw {
       status: 403,
-      message: "Waiters can only update order status to paid",
+      message: "Waiters do not have permission to update order status",
     };
   }
 
-  // Only waiter assigned to order can update it
-  if (user.role === "waiter" && order.waiterId?.toString() !== userId) {
-    throw {
-      status: 403,
-      message: "You can only update orders assigned to you",
-    };
+  // Role-based permission validation
+  if (user.role === "cashier") {
+    // Cashier can: OPEN → VOIDED or PAID_TO_CASHIER
+    if (
+      order.status === "OPEN" &&
+      status !== "VOIDED" &&
+      status !== "PAID_TO_CASHIER"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Cashier can only void or mark as paid to cashier from OPEN status",
+      };
+    }
+    // Cashier can: PAID_TO_CASHIER → TRANSFERRED_TO_OWNER
+    if (
+      order.status === "PAID_TO_CASHIER" &&
+      status !== "TRANSFERRED_TO_OWNER"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Cashier can only mark as transferred to owner from PAID_TO_CASHIER status",
+      };
+    }
+    // Cashier can: DISPUTED → PAID_TO_CASHIER or TRANSFERRED_TO_OWNER (resolve dispute)
+    if (
+      order.status === "DISPUTED" &&
+      status !== "PAID_TO_CASHIER" &&
+      status !== "TRANSFERRED_TO_OWNER"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Cashier can only resolve dispute by marking as paid to cashier or transferred to owner",
+      };
+    }
+    // Cashier cannot perform other transitions
+    if (!["OPEN", "PAID_TO_CASHIER", "DISPUTED"].includes(order.status)) {
+      throw {
+        status: 403,
+        message: "Cashier does not have permission for this status transition",
+      };
+    }
   }
 
+  if (user.role === "owner") {
+    // Owner can: TRANSFERRED_TO_OWNER → OWNER_CONFIRMED or DISPUTED
+    if (
+      order.status === "TRANSFERRED_TO_OWNER" &&
+      status !== "OWNER_CONFIRMED" &&
+      status !== "DISPUTED"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Owner can only confirm or dispute from TRANSFERRED_TO_OWNER status",
+      };
+    }
+    // Owner cannot perform other transitions
+    if (order.status !== "TRANSFERRED_TO_OWNER") {
+      throw {
+        status: 403,
+        message: "Owner can only update orders in TRANSFERRED_TO_OWNER status",
+      };
+    }
+  }
+
+  // Set status, corresponding timestamp, and user tracking
   order.status = status;
+  const now = new Date();
+  const userIdObjectId = new Types.ObjectId(userId);
+
+  if (status === "VOIDED") {
+    order.cancelledAt = now;
+    order.cancelledBy = userIdObjectId as any;
+  } else if (status === "PAID_TO_CASHIER") {
+    order.paymentReceivedAt = now;
+  } else if (status === "TRANSFERRED_TO_OWNER") {
+    order.paymentDeliveredAt = now;
+    order.transferredToOwnerBy = userIdObjectId as any;
+  } else if (status === "OWNER_CONFIRMED") {
+    order.completedAt = now;
+    order.confirmedBy = userIdObjectId as any;
+  } else if (status === "DISPUTED") {
+    order.disputedBy = userIdObjectId as any;
+    // DISPUTED status change doesn't set a timestamp
+  }
+
   await order.save();
 
   await order.populate(
@@ -233,6 +340,7 @@ export const updateOrderStatus = async (
   );
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
+  await populateUserTrackingFields(order);
 
   // Broadcast status change
   notifyCustomerOrderUpdated(order, { updatedFields: { status } });
@@ -248,6 +356,7 @@ export interface UpdateOrderInput {
     nameSnapshot: string;
     priceSnapshot: number;
   }[];
+  tableNumber?: string;
 }
 
 export const updateOrder = async (
@@ -258,6 +367,19 @@ export const updateOrder = async (
 
   if (!order) {
     throw { status: 404, message: "Order not found" };
+  }
+
+  // Only allow updates when order status is OPEN
+  if (order.status !== "OPEN") {
+    throw {
+      status: 400,
+      message: "Order can only be updated when status is OPEN",
+    };
+  }
+
+  // Update table number if provided
+  if (data.tableNumber !== undefined) {
+    order.tableNumber = data.tableNumber;
   }
 
   // Update items if provided
@@ -290,6 +412,7 @@ export const updateOrder = async (
   });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
+  await populateUserTrackingFields(order);
 
   return order;
 };
@@ -304,7 +427,11 @@ export const getOrdersByWaiter = async (
       select: "name description price image isAvailable",
       populate: { path: "category", select: "name" },
     })
-    .populate("cashierId", "name email phone");
+    .populate("cashierId", "name email phone")
+    .populate("cancelledBy", "name email phone")
+    .populate("transferredToOwnerBy", "name email phone")
+    .populate("confirmedBy", "name email phone")
+    .populate("disputedBy", "name email phone");
 };
 
 export const getOrdersByCashier = async (
@@ -317,7 +444,11 @@ export const getOrdersByCashier = async (
       select: "name description price image isAvailable",
       populate: { path: "category", select: "name" },
     })
-    .populate("waiterId", "name email phone");
+    .populate("waiterId", "name email phone")
+    .populate("cancelledBy", "name email phone")
+    .populate("transferredToOwnerBy", "name email phone")
+    .populate("confirmedBy", "name email phone")
+    .populate("disputedBy", "name email phone");
 };
 
 export const markOrderAsPrinted = async (id: string) => {
@@ -331,6 +462,7 @@ export const markOrderAsPrinted = async (id: string) => {
     .populate("cashierId", "name email phone");
 
   if (order) {
+    await populateUserTrackingFields(order);
     // Broadcast status change
     notifyCustomerOrderUpdated(order, {
       updatedFields: { status: order.status },
@@ -346,7 +478,73 @@ export async function printOrder(orderId: string) {
 
   // For now, just return the order
   // Printing functionality can be added later if needed
-  console.log(`[PRINT ORDER] Order ${order.orderNumber} requested for printing`);
+  console.log(
+    `[PRINT ORDER] Order ${order.orderNumber} requested for printing`
+  );
 
   return order;
 }
+
+export const cancelOrder = async (
+  id: string,
+  userId: string
+): Promise<OrderDoc | null> => {
+  const order = await Order.findById(id);
+
+  if (!order) {
+    throw { status: 404, message: "Order not found" };
+  }
+
+  // Validate user permissions
+  const user = await User.findById(userId);
+  if (!user) {
+    throw { status: 401, message: "User not found" };
+  }
+
+  // Only cashier can cancel
+  if (user.role !== "cashier") {
+    throw {
+      status: 403,
+      message: "Only cashiers can cancel orders",
+    };
+  }
+
+  // Only cashier who created the order can cancel
+  if (order.cashierId?.toString() !== userId) {
+    throw {
+      status: 403,
+      message: "You can only cancel orders you created",
+    };
+  }
+
+  // Only allowed when status is OPEN
+  if (order.status !== "OPEN") {
+    throw {
+      status: 400,
+      message: "Order can only be cancelled when status is OPEN",
+    };
+  }
+
+  // Set status to VOIDED, cancelledAt timestamp, and cancelledBy user
+  order.status = "VOIDED";
+  order.cancelledAt = new Date();
+  order.cancelledBy = new Types.ObjectId(userId) as any;
+  await order.save();
+
+  // Populate order before returning
+  await order.populate({
+    path: "items.itemId",
+    select: "name description price image isAvailable",
+    populate: { path: "category", select: "name" },
+  });
+  await order.populate("waiterId", "name email phone");
+  await order.populate("cashierId", "name email phone");
+  await populateUserTrackingFields(order);
+
+  // Broadcast status change
+  notifyCustomerOrderUpdated(order, {
+    updatedFields: { status: order.status },
+  });
+
+  return order;
+};

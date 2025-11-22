@@ -6,16 +6,24 @@ import { Role } from "../../constants/roles";
 
 export const createUser = async (data: {
   name: string;
-  email: string;
+  email?: string;
+  phone: string;
   password: string;
   role?: Role;
 }) => {
-  const exists = await User.findOne({ email: data.email });
-  if (exists) throw { status: 409, message: "Email already exists" };
+  const exists = await User.findOne({ phone: data.phone });
+  if (exists) throw { status: 409, message: "Phone number already exists" };
+
+  if (data.email) {
+    const emailExists = await User.findOne({ email: data.email });
+    if (emailExists) throw { status: 409, message: "Email already exists" };
+  }
+
   const hashedPassword = await hashPassword(data.password);
   const user = await User.create({
     name: data.name,
     email: data.email,
+    phone: data.phone,
     role: data.role || "cashier",
     password: hashedPassword,
   });
@@ -24,8 +32,8 @@ export const createUser = async (data: {
 
 // Legacy login function - kept for backward compatibility
 // The new enhanced login logic is now in auth.controller.ts
-export const login = async (email: string, password: string) => {
-  const user = await User.findOne({ email, isActive: true });
+export const login = async (phone: string, password: string) => {
+  const user = await User.findOne({ phone });
   if (!user) throw { status: 401, message: "Invalid credentials" };
 
   const { verifyPassword } = await import("../../common/utils/password");
@@ -45,6 +53,7 @@ export const login = async (email: string, password: string) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
       role: user.role,
     },
   };
@@ -52,5 +61,4 @@ export const login = async (email: string, password: string) => {
 
 export const listUsers = () =>
   User.find().select("-password").sort({ createdAt: -1 });
-export const deactivate = (id: string) =>
-  User.findByIdAndUpdate(id, { isActive: false }, { new: true });
+export const deactivate = (id: string) => User.findByIdAndDelete(id);

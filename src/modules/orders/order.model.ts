@@ -1,6 +1,12 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type OrderStatus = "ordered" | "paid";
+export type OrderStatus =
+  | "OPEN"
+  | "VOIDED"
+  | "PAID_TO_CASHIER"
+  | "TRANSFERRED_TO_OWNER"
+  | "OWNER_CONFIRMED"
+  | "DISPUTED";
 
 interface OrderItem {
   itemId: Schema.Types.ObjectId;
@@ -22,6 +28,17 @@ export interface OrderDoc extends Document {
   cashierId?: Schema.Types.ObjectId;
   offlineId?: string;
   clientId?: string;
+  // Chain of custody timestamps
+  placedAt: Date;
+  cancelledAt?: Date;
+  paymentReceivedAt?: Date;
+  paymentDeliveredAt?: Date;
+  completedAt?: Date;
+  // User tracking for status changes
+  cancelledBy?: Schema.Types.ObjectId;
+  transferredToOwnerBy?: Schema.Types.ObjectId;
+  confirmedBy?: Schema.Types.ObjectId;
+  disputedBy?: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,10 +59,28 @@ const orderSchema = new Schema<OrderDoc>(
     totalAmount: { type: Number, required: true, min: 0 },
     status: {
       type: String,
-      enum: ["ordered", "paid"],
-      default: "ordered",
+      enum: [
+        "OPEN",
+        "VOIDED",
+        "PAID_TO_CASHIER",
+        "TRANSFERRED_TO_OWNER",
+        "OWNER_CONFIRMED",
+        "DISPUTED",
+      ],
+      default: "OPEN",
       index: true,
     },
+    // Chain of custody timestamps
+    placedAt: { type: Date, required: true },
+    cancelledAt: Date,
+    paymentReceivedAt: Date,
+    paymentDeliveredAt: Date,
+    completedAt: Date,
+    // User tracking for status changes
+    cancelledBy: { type: Schema.Types.ObjectId, ref: "User" },
+    transferredToOwnerBy: { type: Schema.Types.ObjectId, ref: "User" },
+    confirmedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    disputedBy: { type: Schema.Types.ObjectId, ref: "User" },
     waiterId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     cashierId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     offlineId: String,

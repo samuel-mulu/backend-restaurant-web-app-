@@ -20,12 +20,20 @@ router.get("/", requireAuth, orderCtrl.list);
 router.get("/waiter/:waiterId", requireAuth, orderCtrl.getByWaiter);
 router.get("/cashier/:cashierId", requireAuth, orderCtrl.getByCashier);
 
-// Update order status (Waiter/Cashier can update)
+// Update order status (Cashier/Owner can update)
 router.patch(
   "/:id/status",
   requireAuth,
-  requireRole("waiter", "cashier", "owner"),
+  requireRole("cashier", "owner"),
   orderCtrl.updateStatus
+);
+
+// Cancel order (Cashier only - soft delete via status update)
+router.patch(
+  "/:id/cancel",
+  requireAuth,
+  requireRole("cashier"),
+  orderCtrl.cancel
 );
 
 // Update order (Cashier only)
