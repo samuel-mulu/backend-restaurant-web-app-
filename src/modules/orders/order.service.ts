@@ -58,7 +58,7 @@ export const createOrder = async (
     const existing = await Order.findOne({ clientId: payload.clientId });
     if (existing) {
       await existing.populate(
-        "items.itemId",
+        "itepms.itemId",
         "name description price images isAvailable"
       );
       await existing.populate("waiterId", "name email phone");
