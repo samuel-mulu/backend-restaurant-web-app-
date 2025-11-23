@@ -14,30 +14,25 @@ export interface CreateStaffInput {
 export interface UpdateStaffInput {
   phone?: string;
   salary?: number;
-  status?: "active" | "inactive";
   role?: "cashier" | "waiter";
 }
 
 export interface ListStaffFilters {
   role?: Role;
-  status?: "active" | "inactive";
   search?: string;
   page?: number;
   limit?: number;
 }
 
 export const listStaff = async (filters: ListStaffFilters = {}) => {
-  const { role, status, search, page = 1, limit = 50 } = filters;
+  const { role, search, page = 1, limit = 50 } = filters;
   const query: any = {
     role: { $in: ["cashier", "waiter"] }, // Only staff roles
+    isDeleted: { $ne: true }, // Exclude soft-deleted staff
   };
 
   if (role && (role === "cashier" || role === "waiter")) {
     query.role = role;
-  }
-
-  if (status) {
-    query.status = status;
   }
 
   if (search) {
@@ -72,7 +67,13 @@ export const listStaff = async (filters: ListStaffFilters = {}) => {
 };
 
 export const getStaffById = async (id: string): Promise<UserDoc | null> => {
-  const staff = await User.findById(id).select("-password").lean().exec();
+  const staff = await User.findOne({
+    _id: id,
+    isDeleted: { $ne: true },
+  })
+    .select("-password")
+    .lean()
+    .exec();
 
   if (!staff) {
     return null;
@@ -125,8 +126,6 @@ export const createStaff = async (
     phone: data.phone,
     role: data.role,
     salary: data.salary,
-    status: "active",
-    isActive: true,
     clientId: data.clientId,
   });
 
@@ -137,7 +136,10 @@ export const updateStaff = async (
   id: string,
   data: UpdateStaffInput
 ): Promise<UserDoc | null> => {
-  const staff = await User.findById(id);
+  const staff = await User.findOne({
+    _id: id,
+    isDeleted: { $ne: true },
+  });
 
   if (!staff) {
     throw { status: 404, message: "Staff member not found" };
@@ -166,11 +168,6 @@ export const updateStaff = async (
     staff.salary = data.salary;
   }
 
-  if (data.status) {
-    staff.status = data.status;
-    staff.isActive = data.status === "active";
-  }
-
   if (data.role) {
     staff.role = data.role;
   }
@@ -192,9 +189,14 @@ export const deleteStaff = async (id: string): Promise<UserDoc | null> => {
     throw { status: 400, message: "User is not a staff member" };
   }
 
-  // Soft delete: set status to inactive
-  staff.status = "inactive";
-  staff.isActive = false;
+  // Check if already deleted
+  if (staff.isDeleted) {
+    throw { status: 404, message: "Staff member not found" };
+  }
+
+  // Soft delete: mark as deleted
+  staff.isDeleted = true;
+  staff.deletedAt = new Date();
   await staff.save();
 
   return staff;

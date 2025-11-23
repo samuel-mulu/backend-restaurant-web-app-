@@ -79,7 +79,9 @@ async function seedUsers() {
       });
 
       if (existingUser) {
-        console.log(`⚠️  User with phone ${userData.phone} or email ${userData.email} already exists, skipping...`);
+        console.log(
+          `⚠️  User with phone ${userData.phone} or email ${userData.email} already exists, skipping...`
+        );
         continue;
       }
 
@@ -133,4 +135,3 @@ if (require.main === module) {
 }
 
 export { seedUsers };
-

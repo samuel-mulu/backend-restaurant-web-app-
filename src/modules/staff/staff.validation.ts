@@ -23,13 +23,11 @@ export const updateStaffSchema = Joi.object({
     .message("Phone number must be a valid format")
     .optional(),
   salary: Joi.number().min(0).optional(),
-  status: Joi.string().valid("active", "inactive").optional(),
   role: Joi.string().valid("cashier", "waiter").optional(),
 });
 
 export const listStaffSchema = Joi.object({
   role: Joi.string().valid("cashier", "waiter").optional(),
-  status: Joi.string().valid("active", "inactive").optional(),
   search: Joi.string().optional(),
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(100).optional(),

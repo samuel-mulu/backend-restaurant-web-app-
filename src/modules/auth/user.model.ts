@@ -10,6 +10,8 @@ export interface UserDoc extends Document {
   role: Role;
   phone: string;
   salary?: number;
+  isDeleted?: boolean;
+  deletedAt?: Date;
   clientId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -33,6 +35,8 @@ const UserSchema = new Schema<UserDoc>(
     },
     phone: { type: String, required: true, unique: true, index: true },
     salary: { type: Number, min: 0 },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: Date,
     clientId: { type: String, sparse: true, unique: true },
   },
   { timestamps: true }
