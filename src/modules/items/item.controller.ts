@@ -68,6 +68,7 @@ export const list = async (req: Request, res: Response) => {
     const filters = {
       categoryId: req.query.categoryId as string,
       includeDeleted: req.query.includeDeleted === "true",
+      includeUnavailable: req.query.includeUnavailable === "true",
     };
 
     const items = await itemService.listItems(filters);

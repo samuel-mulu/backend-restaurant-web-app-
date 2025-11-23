@@ -42,6 +42,7 @@ export interface UpdateItemInput {
 export interface ListItemsFilters {
   categoryId?: string;
   includeDeleted?: boolean;
+  includeUnavailable?: boolean;
 }
 
 /**
@@ -186,7 +187,12 @@ export const createItem = async (
 export const listItems = async (
   filters: ListItemsFilters = {}
 ): Promise<any[]> => {
-  const query: any = { isAvailable: true, isDeleted: false };
+  const query: any = { isDeleted: false };
+
+  // Only filter by availability if includeUnavailable is not true
+  if (!filters.includeUnavailable) {
+    query.isAvailable = true;
+  }
 
   if (filters.categoryId) {
     if (!Types.ObjectId.isValid(filters.categoryId)) {
