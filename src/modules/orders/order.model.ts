@@ -126,3 +126,44 @@ orderSchema.index({ cashierId: 1, createdAt: -1 });
 orderSchema.index({ tableNumber: 1, status: 1 });
 
 export const Order = model<OrderDoc>("Order", orderSchema);
+
+// Fix old orderCode index - runs once on first model access
+let indexFixAttempted = false;
+export async function fixOrderCodeIndex(): Promise<void> {
+  if (indexFixAttempted) return;
+  indexFixAttempted = true;
+
+  try {
+    const collection = Order.collection;
+    const indexes = await collection.indexes();
+    const orderCodeIndex = indexes.find((idx) => idx.name === "orderCode_1");
+
+    if (orderCodeIndex) {
+      console.log("[Order Model] Dropping old orderCode_1 index...");
+      await collection.dropIndex("orderCode_1").catch((err: any) => {
+        if (err.code !== 27 && err.codeName !== "IndexNotFound") {
+          console.error("[Order Model] Error dropping orderCode_1 index:", err);
+        }
+      });
+      console.log("[Order Model] ✓ Fixed orderCode index issue");
+    }
+  } catch (error: any) {
+    // Ignore errors during index cleanup - it's not critical
+    if (error.code !== 27 && error.codeName !== "IndexNotFound") {
+      console.warn(
+        "[Order Model] Warning: Could not check/clean orderCode index:",
+        error.message
+      );
+    }
+  }
+}
+
+// Auto-fix on model initialization (runs when Order model is first imported)
+if (typeof process !== "undefined") {
+  // Use setImmediate to ensure mongoose is connected
+  setImmediate(() => {
+    fixOrderCodeIndex().catch(() => {
+      indexFixAttempted = false;
+    });
+  });
+}

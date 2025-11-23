@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { Order, OrderDoc, OrderStatus } from "./order.model";
+import { Order, OrderDoc, OrderStatus, fixOrderCodeIndex } from "./order.model";
 import {
   notifyCashiersNewOrder,
   notifyCustomerOrderUpdated,
@@ -57,6 +57,11 @@ export const createOrder = async (
   payload: CreateOrderInput,
   cashierId?: string
 ): Promise<OrderDoc> => {
+  // Fix old orderCode index if it exists (one-time fix)
+  await fixOrderCodeIndex().catch(() => {
+    // Ignore errors - index fix is not critical for order creation
+  });
+
   // Check for idempotency if clientId provided
   if (payload.clientId) {
     const existing = await Order.findOne({ clientId: payload.clientId });
