@@ -106,14 +106,13 @@ export const createSalary = async (
     throw { status: 400, message: "Amount must be greater than 0" };
   }
 
-  // Validate staff exists and is active
-  const staff = await User.findById(data.staffId);
+  // Validate staff exists and is not deleted
+  const staff = await User.findOne({
+    _id: data.staffId,
+    isDeleted: { $ne: true },
+  });
   if (!staff) {
     throw { status: 404, message: "Staff member not found" };
-  }
-
-  if (staff.status !== "active" || !staff.isActive) {
-    throw { status: 400, message: "Staff member is not active" };
   }
 
   // Check for duplicate (compound unique index will also prevent this, but we check first for better error message)

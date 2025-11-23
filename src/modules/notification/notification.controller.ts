@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Notification } from "./notification.model";
 
-// Get notifications for a user (cashier/admin)
+// Get notifications for a user (cashier/owner)
 export const getUserNotifications = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
@@ -72,7 +72,7 @@ export const markAllAsRead = async (req: Request, res: Response) => {
   }
 };
 
-// Create a notification (for system/admin use)
+// Create a notification (for system/owner use)
 export const createNotification = async (req: Request, res: Response) => {
   try {
     const { userId, title, message, type = "system" } = req.body;

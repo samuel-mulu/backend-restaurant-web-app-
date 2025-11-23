@@ -29,11 +29,13 @@ Authorization: Bearer <token>
 ## Staff Management
 
 ### List Staff
+
 **GET** `/staff`
 
 **Access**: Owner (all staff), Cashier/Waiter (active only)
 
 **Query Parameters**:
+
 - `role` (optional): Filter by role (cashier, waiter)
 - `status` (optional): Filter by status (active, inactive)
 - `search` (optional): Search by name, email, or phone
@@ -41,6 +43,7 @@ Authorization: Bearer <token>
 - `limit` (optional): Items per page (default: 50, max: 100)
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -57,11 +60,13 @@ Authorization: Bearer <token>
 ```
 
 ### Get Staff by ID
+
 **GET** `/staff/:id`
 
 **Access**: Owner (all), Cashier/Waiter (active only)
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -78,6 +83,7 @@ Authorization: Bearer <token>
 ```
 
 ### Create Staff
+
 **POST** `/staff`
 
 **Access**: Owner only
@@ -85,6 +91,7 @@ Authorization: Bearer <token>
 **Rate Limit**: 10 requests per 15 minutes
 
 **Request Body**:
+
 ```json
 {
   "name": "John Doe",
@@ -99,11 +106,13 @@ Authorization: Bearer <token>
 **Response**: 201 Created
 
 ### Update Staff
+
 **PATCH** `/staff/:id`
 
 **Access**: Owner only
 
 **Request Body**:
+
 ```json
 {
   "phone": "+1234567890",
@@ -114,6 +123,7 @@ Authorization: Bearer <token>
 ```
 
 ### Delete Staff (Soft Delete)
+
 **DELETE** `/staff/:id`
 
 **Access**: Owner only
@@ -123,11 +133,13 @@ Authorization: Bearer <token>
 ## Salary Management
 
 ### List Salaries
+
 **GET** `/salary`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `staffId` (optional): Filter by staff ID
 - `month` (optional): Filter by month (YYYY-MM format)
 - `year` (optional): Filter by year
@@ -136,11 +148,13 @@ Authorization: Bearer <token>
 - `limit` (optional): Items per page
 
 ### Get Salary by ID
+
 **GET** `/salary/:id`
 
 **Access**: Owner only
 
 ### Create Salary Record
+
 **POST** `/salary`
 
 **Access**: Owner only
@@ -148,6 +162,7 @@ Authorization: Bearer <token>
 **Rate Limit**: 10 requests per 15 minutes
 
 **Request Body**:
+
 ```json
 {
   "staffId": "...",
@@ -161,11 +176,13 @@ Authorization: Bearer <token>
 ```
 
 ### Update Salary
+
 **PATCH** `/salary/:id`
 
 **Access**: Owner only
 
 **Request Body**:
+
 ```json
 {
   "amount": 3500,
@@ -175,15 +192,18 @@ Authorization: Bearer <token>
 ```
 
 ### Get Salary Summary
+
 **GET** `/salary/summary`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `month` (optional): Filter by month (YYYY-MM)
 - `year` (optional): Filter by year
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -209,6 +229,7 @@ Authorization: Bearer <token>
 ```
 
 ### Get Staff Salary History
+
 **GET** `/salary/staff/:staffId`
 
 **Access**: Owner only
@@ -218,12 +239,14 @@ Authorization: Bearer <token>
 ## Order Management
 
 ### List Orders
+
 **GET** `/orders`
 
 **Access**: Authenticated users
 
 **Query Parameters**:
-- `status` (optional): Filter by status (pending, preparing, ready, served, completed)
+
+- `status` (optional): Filter by status (OPEN, VOIDED, PAID_TO_CASHIER, TRANSFERRED_TO_OWNER, OWNER_CONFIRMED, DISPUTED)
 - `waiterId` (optional): Filter by waiter ID
 - `cashierId` (optional): Filter by cashier ID
 - `startDate` (optional): Start date filter
@@ -232,16 +255,19 @@ Authorization: Bearer <token>
 **Note**: Waiters automatically see only their assigned orders
 
 ### Get Order by ID
+
 **GET** `/orders/:id`
 
 **Access**: Authenticated users
 
 ### Create Order
+
 **POST** `/orders`
 
 **Access**: Public (customers) or Cashier
 
 **Request Body**:
+
 ```json
 {
   "tableNumber": "5",
@@ -266,31 +292,57 @@ Authorization: Bearer <token>
 **Note**: Cashier ID is auto-assigned if user is cashier
 
 ### Update Order Status
+
 **PATCH** `/orders/:id/status`
 
-**Access**: Waiter, Cashier, Owner
+**Access**: Cashier, Owner
 
 **Request Body**:
+
 ```json
 {
-  "status": "preparing"
+  "status": "PAID_TO_CASHIER"
 }
 ```
 
 **Valid Status Transitions**:
-- pending → preparing
-- preparing → ready
-- ready → served
-- served → completed
 
-**Note**: Waiters can only update to "served" or "completed"
+- `OPEN` → `VOIDED` or `PAID_TO_CASHIER`
+- `PAID_TO_CASHIER` → `TRANSFERRED_TO_OWNER` or `DISPUTED`
+- `TRANSFERRED_TO_OWNER` → `OWNER_CONFIRMED` or `DISPUTED`
+- `DISPUTED` → `PAID_TO_CASHIER` or `TRANSFERRED_TO_OWNER` (cashier resolves)
+- `VOIDED` → `[]` (terminal)
+- `OWNER_CONFIRMED` → `[]` (terminal)
+
+**Role-Based Permissions**:
+
+- **Cashier**:
+  - Can transition `OPEN` → `VOIDED` or `PAID_TO_CASHIER`
+  - Can transition `PAID_TO_CASHIER` → `TRANSFERRED_TO_OWNER`
+  - Can resolve disputes: `DISPUTED` → `PAID_TO_CASHIER` or `TRANSFERRED_TO_OWNER`
+- **Owner**:
+  - Can transition `TRANSFERRED_TO_OWNER` → `OWNER_CONFIRMED` or `DISPUTED`
+- **Waiter**:
+  - No status update permissions (manual cash collection only)
+
+**Chain of Custody Timestamps**:
+
+When status changes, corresponding timestamps are automatically set:
+
+- `VOIDED` → sets `cancelledAt`
+- `PAID_TO_CASHIER` → sets `paymentReceivedAt`
+- `TRANSFERRED_TO_OWNER` → sets `paymentDeliveredAt`
+- `OWNER_CONFIRMED` → sets `completedAt`
+- `DISPUTED` → no timestamp (status change only)
 
 ### Update Order
+
 **PATCH** `/orders/:id`
 
 **Access**: Cashier, Owner
 
 **Request Body**:
+
 ```json
 {
   "discount": 15,
@@ -300,38 +352,101 @@ Authorization: Bearer <token>
 ```
 
 ### Get Orders by Waiter
+
 **GET** `/orders/waiter/:waiterId`
 
 **Access**: Authenticated users
 
 ### Get Orders by Cashier
+
 **GET** `/orders/cashier/:cashierId`
 
 **Access**: Authenticated users
+
+### Cancel Order
+
+**PATCH** `/orders/:id/cancel`
+
+**Access**: Cashier only
+
+**Description**: Soft delete via status update. Cancels an order by setting status to `VOIDED`. Order remains in database for reporting purposes (e.g., monthly cancelled orders report).
+
+**Response**:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "...",
+    "orderNumber": "ORD-20240101-0001",
+    "status": "VOIDED",
+    "cancelledAt": "2024-01-01T10:00:00.000Z",
+    ...
+  }
+}
+```
+
+**Note**:
+
+- Only cashier who created the order can cancel it
+- Order must be in `OPEN` status to be cancelled
+- Cancelled orders remain in database for monthly reporting
+
+### Order Status Flow
+
+The system uses professional accounting-friendly status names for cash flow tracking:
+
+**Status Flow**:
+
+1. `OPEN` - Order created by cashier (sets `placedAt` timestamp)
+2. `PAID_TO_CASHIER` - Cashier marks cash received from waiter (sets `paymentReceivedAt`)
+3. `TRANSFERRED_TO_OWNER` - Cashier marks cash delivered to owner (sets `paymentDeliveredAt`)
+4. `OWNER_CONFIRMED` - Owner confirms receipt of cash (sets `completedAt`)
+
+**Cancellation Flow**:
+
+- `OPEN` → `VOIDED` (cashier cancels before accepting money, sets `cancelledAt`)
+
+**Dispute Flow**:
+
+- `TRANSFERRED_TO_OWNER` → `DISPUTED` (owner rejects/disputes)
+- `DISPUTED` → `PAID_TO_CASHIER` or `TRANSFERRED_TO_OWNER` (cashier resolves dispute)
+
+**Benefits of Professional Status Naming**:
+
+- ✔ Short, professional, accounting-friendly (used in POS, retail ERP, and finance systems)
+- ✔ Clear responsibility (Cashier handles: `PAID_TO_CASHIER` → `TRANSFERRED_TO_OWNER`, Owner handles: `OWNER_CONFIRMED`)
+- ✔ Perfect for auditing (tracks who collected cash, who transferred it, who confirmed it, when each event happened)
+- ✔ Prevents fraud (owner must explicitly confirm)
 
 ---
 
 ## Inventory Management
 
 ### List Inventory
+
 **GET** `/inventory`
 
 **Access**: Cashier, Owner
 
 **Query Parameters**:
+
 - `lowStock` (optional): Filter low stock items (true/false)
 
 ### Get Inventory by ID
+
 **GET** `/inventory/:id`
 
 **Access**: Cashier, Owner
 
 ### Create Inventory Record
+
 **POST** `/inventory`
 
 **Access**: Cashier only
 
 **Request Body**:
+
 ```json
 {
   "productId": "...",
@@ -342,11 +457,13 @@ Authorization: Bearer <token>
 ```
 
 ### Update Inventory
+
 **PATCH** `/inventory/:id`
 
 **Access**: Cashier only
 
 **Request Body**:
+
 ```json
 {
   "quantity": 150,
@@ -355,11 +472,13 @@ Authorization: Bearer <token>
 ```
 
 ### Record Purchase
+
 **POST** `/inventory/:id/purchase`
 
 **Access**: Cashier only
 
 **Request Body**:
+
 ```json
 {
   "quantity": 50,
@@ -369,11 +488,13 @@ Authorization: Bearer <token>
 ```
 
 ### Get Low Stock Items
+
 **GET** `/inventory/low-stock`
 
 **Access**: Cashier, Owner
 
 ### Get Purchase History
+
 **GET** `/inventory/:id/history`
 
 **Access**: Cashier, Owner
@@ -383,15 +504,18 @@ Authorization: Bearer <token>
 ## Statistics & Analytics
 
 ### Dashboard Stats
+
 **GET** `/statistics/dashboard`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `startDate` (optional): Start date
 - `endDate` (optional): End date
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -413,16 +537,19 @@ Authorization: Bearer <token>
 ```
 
 ### Sales Analytics
+
 **GET** `/statistics/sales`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `startDate` (optional)
 - `endDate` (optional)
 - `cashierId` (optional)
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -435,30 +562,36 @@ Authorization: Bearer <token>
 ```
 
 ### Product Analytics
+
 **GET** `/statistics/products`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `startDate` (optional)
 - `endDate` (optional)
 - `limit` (optional): Number of top items (default: 10)
 
 ### Staff Performance
+
 **GET** `/statistics/staff`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `startDate` (optional)
 - `endDate` (optional)
 
 ### Inventory Analytics
+
 **GET** `/statistics/inventory`
 
 **Access**: Owner only
 
 **Query Parameters**:
+
 - `startDate` (optional)
 - `endDate` (optional)
 
@@ -468,25 +601,27 @@ Authorization: Bearer <token>
 
 ### Client Events (Emit)
 
-- `join-admin`: Join admin rooms
+- `join-owner`: Join owner rooms
 - `join-cashier`: Join cashier rooms
 - `join-waiter`: Join waiter room (requires waiterId)
-- `join-owner`: Join owner rooms
 - `join-customer`: Join customer channel (requires channel ID)
 - `subscribe-orders`: Subscribe to general order events
 
 ### Server Events (Listen)
 
 #### Order Events
+
 - `newOrder`: New order created
 - `orderUpdated`: Order updated
 - `order:status:changed`: Order status changed
 - `order:assigned:waiter`: Order assigned to waiter
 
 #### Inventory Events
+
 - `inventory:low:stock`: Inventory item below threshold
 
 #### Statistics Events
+
 - `statistics:updated`: Dashboard statistics updated
 
 ---
@@ -537,4 +672,3 @@ All errors follow this format:
 - ObjectId fields should be valid MongoDB ObjectIds
 - Phone numbers should follow international format
 - Order numbers are auto-generated in format: `ORD-YYYYMMDD-XXXX`
-

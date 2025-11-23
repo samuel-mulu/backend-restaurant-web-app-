@@ -11,16 +11,10 @@ export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = {
       role: req.query.role as any,
-      status: req.query.status as any,
       search: req.query.search as string,
       page: req.query.page ? parseInt(req.query.page as string) : undefined,
       limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
     };
-
-    // If user is not owner, only show active staff
-    if (req.user?.role !== "owner") {
-      filters.status = "active";
-    }
 
     const result = await staffService.listStaff(filters);
 
@@ -42,15 +36,6 @@ export const getById = async (
     const staff = await staffService.getStaffById(req.params.id);
 
     if (!staff) {
-      res.status(404).json({
-        success: false,
-        message: "Staff member not found",
-      });
-      return;
-    }
-
-    // If user is not owner, only show active staff
-    if (req.user?.role !== "owner" && staff.status !== "active") {
       res.status(404).json({
         success: false,
         message: "Staff member not found",
@@ -90,7 +75,6 @@ export const create = [
           phone: staff.phone,
           role: staff.role,
           salary: staff.salary,
-          status: staff.status,
         },
       });
     } catch (err: any) {
@@ -130,7 +114,6 @@ export const update = [
           phone: staff.phone,
           role: staff.role,
           salary: staff.salary,
-          status: staff.status,
         },
       });
     } catch (err: any) {
@@ -167,7 +150,6 @@ export const remove = async (
       message: "Staff member deactivated successfully",
       data: {
         id: staff._id,
-        status: staff.status,
       },
     });
   } catch (err: any) {

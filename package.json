@@ -9,7 +9,10 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed": "ts-node src/seeders/seed.ts"
+    "seed": "ts-node src/seeders/seed.ts",
+    "seed:users": "ts-node src/seeders/seedUsers.ts",
+    "seed:tables": "ts-node src/seeders/seedTables.ts",
+    "seed:all": "ts-node src/seeders/seedAll.ts"
   },
   "keywords": [],
   "author": "",

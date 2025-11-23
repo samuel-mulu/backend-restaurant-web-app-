@@ -26,7 +26,7 @@ export function signAccessToken(payload: JwtUser) {
   });
 }
 
-type RefreshPayload = JwtUser & { jti: string; tv: number };
+type RefreshPayload = JwtUser & { jti: string };
 
 export function signRefreshToken(payload: RefreshPayload) {
   return (jwt as any).sign(payload, env.jwtRefreshSecret, {

@@ -18,9 +18,9 @@ declare global {
         _id: string;
         id: string;
         name: string;
-        email: string;
+        email?: string;
+        phone: string;
         role: Role;
-        isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
       };
@@ -72,7 +72,7 @@ export async function requireAuth(
     }
 
     const user = await User.findById(id)
-      .select("name email role phone status isActive createdAt updatedAt")
+      .select("name email role phone createdAt updatedAt")
       .lean()
       .exec();
 
@@ -90,28 +90,13 @@ export async function requireAuth(
       return;
     }
 
-    // Guard by account status
-    if (!user.isActive) {
-      res.status(403).json({
-        success: false,
-        message: "Account deactivated",
-        details: [
-          {
-            message:
-              "Your account has been deactivated. Please contact support.",
-          },
-        ],
-      });
-      return;
-    }
-
     req.user = {
-      _id: user._id,
-      id: user._id,
+      _id: String(user._id),
+      id: String(user._id),
       name: user.name,
       email: user.email,
+      phone: user.phone,
       role: user.role,
-      isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

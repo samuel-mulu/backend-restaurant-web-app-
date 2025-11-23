@@ -11,6 +11,8 @@ import statisticsRoutes from "./statistics/statistics.routes";
 import auditRoutes from "./audit/audit.routes";
 import shiftsRoutes from "./shifts/shifts.routes";
 import syncRoutes from "./sync/sync.routes";
+import ownerRoutes from "./owner/owner.routes";
+import tableRoutes from "./tables/table.routes";
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use("/statistics", statisticsRoutes);
 router.use("/audit", auditRoutes);
 router.use("/shifts", shiftsRoutes);
 router.use("/sync", syncRoutes);
+router.use("/owner", ownerRoutes);
+router.use("/tables", tableRoutes);
 
 export default router;

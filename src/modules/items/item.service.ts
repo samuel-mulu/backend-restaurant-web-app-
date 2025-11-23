@@ -159,12 +159,10 @@ export const createItem = async (
     return created[0];
   } catch (error: any) {
     // Clean up uploaded image on error
-    if (uploadedImage) {
-      await deleteImage(uploadedImage.publicId).catch((err) =>
-        console.error(
-          `Failed to cleanup image ${uploadedImage?.publicId}:`,
-          err
-        )
+    if (uploadedImage?.publicId) {
+      const publicId = uploadedImage.publicId;
+      await deleteImage(publicId).catch((err) =>
+        console.error(`Failed to cleanup image ${publicId}:`, err)
       );
     }
     // Re-throw as ItemServiceError if not already
@@ -208,18 +206,10 @@ export const listItems = async (
     delete query.isDeleted;
   }
 
-  const items = await Item.find(query)
-    .populate("category")
-    .sort({ name: 1 })
-    .lean();
-  // Remove categoryId when category is populated
-  return items.map((item: any) => {
-    if (item.category) {
-      const { categoryId, ...rest } = item;
-      return rest;
-    }
-    return item;
-  });
+  const items = await Item.find(query).populate("category").sort({ name: 1 });
+
+  // Use toJSON to apply model transform (converts _id to id, handles category)
+  return items.map((item) => item.toJSON());
 };
 
 /**
@@ -232,17 +222,16 @@ export const getItemById = async (id: string): Promise<any | null> => {
     throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
   }
 
-  const item = await Item.findOne({ _id: id, isDeleted: false })
-    .populate("category")
-    .lean();
+  const item = await Item.findOne({ _id: id, isDeleted: false }).populate(
+    "category"
+  );
 
-  // Remove categoryId if category is populated
-  if (item && item.category) {
-    const { categoryId, ...rest } = item;
-    return rest;
+  if (!item) {
+    return null;
   }
 
-  return item;
+  // Use toJSON to apply model transform (converts _id to id, handles category)
+  return item.toJSON();
 };
 
 /**
@@ -318,12 +307,10 @@ export const updateItem = async (
 
     if (!updated) {
       // Clean up uploaded image if update failed
-      if (uploadedImage) {
-        await deleteImage(uploadedImage.publicId).catch((err) =>
-          console.error(
-            `Failed to cleanup image ${uploadedImage?.publicId}:`,
-            err
-          )
+      if (uploadedImage?.publicId) {
+        const publicId = uploadedImage.publicId;
+        await deleteImage(publicId).catch((err) =>
+          console.error(`Failed to cleanup image ${publicId}:`, err)
         );
       }
       throw new ItemServiceError(
@@ -334,24 +321,20 @@ export const updateItem = async (
     }
 
     // Delete old image only after successful DB update
-    if (oldImageToDelete) {
-      await deleteImage(oldImageToDelete.publicId).catch((err) =>
-        console.error(
-          `Failed to delete old image ${oldImageToDelete?.publicId}:`,
-          err
-        )
+    if (oldImageToDelete?.publicId) {
+      const publicId = oldImageToDelete.publicId;
+      await deleteImage(publicId).catch((err) =>
+        console.error(`Failed to delete old image ${publicId}:`, err)
       );
     }
 
     return updated;
   } catch (error: any) {
     // Clean up uploaded image on error
-    if (uploadedImage) {
-      await deleteImage(uploadedImage.publicId).catch((err) =>
-        console.error(
-          `Failed to cleanup image ${uploadedImage?.publicId}:`,
-          err
-        )
+    if (uploadedImage?.publicId) {
+      const publicId = uploadedImage.publicId;
+      await deleteImage(publicId).catch((err) =>
+        console.error(`Failed to cleanup image ${publicId}:`, err)
       );
     }
     // Re-throw as ItemServiceError if not already
@@ -420,9 +403,10 @@ export const permanentDeleteItem = async (id: string): Promise<void> => {
   }
 
   // Delete image first
-  if (item.image) {
-    await deleteImage(item.image.publicId).catch((err) =>
-      console.error(`Failed to delete image ${item.image?.publicId}:`, err)
+  if (item.image?.publicId) {
+    const publicId = item.image.publicId;
+    await deleteImage(publicId).catch((err) =>
+      console.error(`Failed to delete image ${publicId}:`, err)
     );
   }
 
@@ -434,10 +418,12 @@ export const permanentDeleteItem = async (id: string): Promise<void> => {
  * @returns Array of deleted items with populated categories
  */
 export const getDeletedItems = async (): Promise<any[]> => {
-  return await Item.find({ isDeleted: true })
+  const items = await Item.find({ isDeleted: true })
     .populate("category")
-    .sort({ deletedAt: -1 })
-    .lean();
+    .sort({ deletedAt: -1 });
+
+  // Use toJSON to apply model transform (converts _id to id, handles category)
+  return items.map((item) => item.toJSON());
 };
 
 /**
@@ -445,13 +431,15 @@ export const getDeletedItems = async (): Promise<any[]> => {
  * @returns Array of unavailable items with populated categories
  */
 export const getUnavailableItems = async (): Promise<any[]> => {
-  return await Item.find({
+  const items = await Item.find({
     isAvailable: false,
     isDeleted: false,
   })
     .populate("category")
-    .sort({ name: 1 })
-    .lean();
+    .sort({ name: 1 });
+
+  // Use toJSON to apply model transform (converts _id to id, handles category)
+  return items.map((item) => item.toJSON());
 };
 
 /**

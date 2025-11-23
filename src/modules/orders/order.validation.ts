@@ -15,7 +15,6 @@ export const createOrderSchema = Joi.object({
             return value;
           })
           .required(),
-        typeSnapshot: Joi.string().valid("food", "beverage").required(),
         qty: Joi.number().integer().min(1).required(),
         nameSnapshot: Joi.string().required(),
         priceSnapshot: Joi.number().min(0).required(),
@@ -48,6 +47,8 @@ export const createOrderSchema = Joi.object({
 export const updateOrderSchema = Joi.object({
   discount: Joi.number().min(0).optional(),
   notes: Joi.string().optional(),
+  note: Joi.string().optional(),
+  tableNumber: Joi.string().optional(),
   items: Joi.array()
     .items(
       Joi.object({
@@ -59,7 +60,6 @@ export const updateOrderSchema = Joi.object({
             return value;
           })
           .required(),
-        typeSnapshot: Joi.string().valid("food", "beverage").required(),
         qty: Joi.number().integer().min(1).required(),
         nameSnapshot: Joi.string().required(),
         priceSnapshot: Joi.number().min(0).required(),
@@ -71,6 +71,13 @@ export const updateOrderSchema = Joi.object({
 
 export const updateOrderStatusSchema = Joi.object({
   status: Joi.string()
-    .valid("pending", "preparing", "ready", "served", "completed")
+    .valid(
+      "OPEN",
+      "VOIDED",
+      "PAID_TO_CASHIER",
+      "TRANSFERRED_TO_OWNER",
+      "OWNER_CONFIRMED",
+      "DISPUTED"
+    )
     .required(),
 });

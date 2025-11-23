@@ -228,7 +228,7 @@ const handleOrderDelete = async (io: Server, change: any) => {
   console.log(`🗑️ Order deleted via change stream: ${orderId}`);
 
   // Broadcast to all relevant clients
-  io.to("admin:orders").emit("orderDeleted", {
+  io.to("owner:orders").emit("orderDeleted", {
     type: "order_deleted",
     data: { id: orderId },
     timestamp: new Date(),

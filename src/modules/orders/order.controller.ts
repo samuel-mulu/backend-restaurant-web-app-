@@ -29,11 +29,18 @@ export const list = async (req: Request, res: Response) => {
       endDate: req.query.endDate
         ? new Date(req.query.endDate as string)
         : undefined,
+      search: req.query.search as string,
+      tableNumber: req.query.tableNumber as string,
     };
 
     // If waiter, only show their orders
     if (req.user?.role === "waiter") {
       filters.waiterId = req.user._id;
+    }
+
+    // If cashier, only show orders they created (unless owner is viewing)
+    if (req.user?.role === "cashier" && !req.query.cashierId) {
+      filters.cashierId = req.user._id;
     }
 
     const orders = await orderService.listOrders(filters);
@@ -81,6 +88,42 @@ export const updateStatus = async (req: Request, res: Response) => {
       return;
     }
     res.status(500).json({ error: "Failed to update order status" });
+  }
+};
+
+export const bulkUpdateStatus = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const { orderIds, status } = req.body;
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: "Order IDs array is required" });
+    }
+    if (!status) {
+      return res.status(400).json({ error: "Status is required" });
+    }
+
+    const result = await orderService.bulkUpdateOrderStatus(
+      orderIds,
+      status,
+      req.user._id
+    );
+
+    res.json({
+      success: true,
+      updated: result.updated,
+      failed: result.failed,
+      message: `Updated ${result.updated.length} order(s)${result.failed.length > 0 ? `, ${result.failed.length} failed` : ""}`,
+    });
+  } catch (error: any) {
+    console.error("Error bulk updating order status:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to bulk update order status" });
   }
 };
 
@@ -145,5 +188,140 @@ export const printOrder = async (req: Request, res: Response) => {
       error: "Failed to print order",
       details: errorMessage,
     });
+  }
+};
+
+export const cancel = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const order = await orderService.cancelOrder(req.params.id, req.user._id);
+    res.json({ success: true, data: order });
+  } catch (error: any) {
+    console.error("Error cancelling order:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to cancel order" });
+  }
+};
+
+// Report Controllers
+
+export const getDailyReport = async (req: Request, res: Response) => {
+  try {
+    const date = req.query.date
+      ? new Date(req.query.date as string)
+      : undefined;
+    const report = await orderService.getDailyReport(date);
+    res.json(report);
+  } catch (error: any) {
+    console.error("Error getting daily report:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to get daily report" });
+  }
+};
+
+export const getCashierReport = async (req: Request, res: Response) => {
+  try {
+    const { cashierId } = req.params;
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate as string)
+      : undefined;
+    const endDate = req.query.endDate
+      ? new Date(req.query.endDate as string)
+      : undefined;
+
+    const report = await orderService.getCashierReport(
+      cashierId,
+      startDate,
+      endDate
+    );
+    res.json(report);
+  } catch (error: any) {
+    console.error("Error getting cashier report:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to get cashier report" });
+  }
+};
+
+export const getWaiterReport = async (req: Request, res: Response) => {
+  try {
+    const { waiterId } = req.params;
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate as string)
+      : undefined;
+    const endDate = req.query.endDate
+      ? new Date(req.query.endDate as string)
+      : undefined;
+
+    const report = await orderService.getWaiterReport(
+      waiterId,
+      startDate,
+      endDate
+    );
+    res.json(report);
+  } catch (error: any) {
+    console.error("Error getting waiter report:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to get waiter report" });
+  }
+};
+
+export const getStatusReport = async (req: Request, res: Response) => {
+  try {
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate as string)
+      : undefined;
+    const endDate = req.query.endDate
+      ? new Date(req.query.endDate as string)
+      : undefined;
+
+    const report = await orderService.getStatusReport(startDate, endDate);
+    res.json(report);
+  } catch (error: any) {
+    console.error("Error getting status report:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to get status report" });
+  }
+};
+
+export const getDateRangeReport = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res
+        .status(400)
+        .json({ error: "startDate and endDate are required" });
+    }
+
+    const report = await orderService.getDateRangeReport(
+      new Date(startDate as string),
+      new Date(endDate as string)
+    );
+    res.json(report);
+  } catch (error: any) {
+    console.error("Error getting date range report:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to get date range report" });
   }
 };

@@ -19,28 +19,6 @@ import { ROLE_LABELS } from "../../constants/roles";
 import { hashPassword } from "../../common/utils/password";
 import * as svc from "./auth.service";
 
-const MAX_FAILED = 25;
-const LOCK_MINUTES = 15;
-
-// --- Helpers ---------------------------------------------------------------
-
-function isLocked(user: any) {
-  return user.lockUntil && user.lockUntil.getTime() > Date.now();
-}
-
-function lockUser(user: any) {
-  user.failedLoginCount = (user.failedLoginCount ?? 0) + 1;
-  if (user.failedLoginCount >= MAX_FAILED) {
-    user.lockUntil = new Date(Date.now() + LOCK_MINUTES * 60 * 1000);
-    user.failedLoginCount = 0;
-  }
-}
-
-function clearLockState(user: any) {
-  user.failedLoginCount = 0;
-  user.lockUntil = undefined;
-}
-
 /** small constant delay to reduce timing side-channels */
 function timingEqualizer(ms = 120) {
   return new Promise((r) => setTimeout(r, ms));
@@ -48,13 +26,26 @@ function timingEqualizer(ms = 120) {
 
 // --- Controller ------------------------------------------------------------
 
-export const register = async (
+export const createStaff = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { name, email, password, role } = req.body;
+    // Registration is owner-only - require owner authentication
+    const authUser = req.user;
+    if (!authUser) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        details: [
+          { message: "Please log in with a valid account to continue." },
+        ],
+      });
+      return;
+    }
+
+    const { name, email, password, role, phone } = req.body;
 
     if (!name) {
       res.status(400).json({
@@ -65,11 +56,11 @@ export const register = async (
       return;
     }
 
-    if (!email) {
+    if (!phone) {
       res.status(400).json({
         success: false,
         message: "Validation failed",
-        details: [{ field: "email", message: "email is required" }],
+        details: [{ field: "phone", message: "phone is required" }],
       });
       return;
     }
@@ -83,58 +74,53 @@ export const register = async (
       return;
     }
 
-    const token = getAccessToken(req);
-
-    if (token) {
-      const decoded = verifyAccessToken(token);
-      if (!decoded) {
-        res.status(401).json({
-          success: false,
-          message: "Token expired or invalid token used",
-        });
-        return;
-      }
-      if (decoded.role !== "owner") {
-        res.status(403).json({
-          success: false,
-          message: "Access denied",
-          details: [
-            { message: "You don't have permission to perform this action" },
-          ],
-        });
-        return;
-      }
-    } else if (role && role !== "cashier") {
+    // Ensure only cashier or waiter roles can be created
+    if (role && role !== "cashier" && role !== "waiter") {
       res.status(403).json({
         success: false,
         message: "Access denied",
-        details: [
-          { message: "You don't have permission to perform this action" },
-        ],
+        details: [{ message: "Only cashier and waiter roles can be created" }],
       });
       return;
     }
 
     const existing = await User.findOne({
-      email: email.toLowerCase().trim(),
+      phone: phone.trim(),
     }).lean();
 
     if (existing) {
       res.status(409).json({
         success: false,
         message: "Registration failed",
-        details: [{ message: "Email already in use" }],
+        details: [{ message: "Phone number already in use" }],
       });
       return;
+    }
+
+    // Check email if provided
+    if (email) {
+      const existingEmail = await User.findOne({
+        email: email.toLowerCase().trim(),
+      }).lean();
+
+      if (existingEmail) {
+        res.status(409).json({
+          success: false,
+          message: "Registration failed",
+          details: [{ message: "Email already in use" }],
+        });
+        return;
+      }
     }
 
     const hashed = await hashPassword(password);
 
     const user = await User.create({
       name,
-      email: email.toLowerCase().trim(),
+      email: email ? email.toLowerCase().trim() : undefined,
+      phone: phone.trim(),
       password: hashed,
-      role: role || "cashier",
+      role: role || "cashier", // Default to cashier if not specified
     });
 
     res.status(201).json({
@@ -143,10 +129,10 @@ export const register = async (
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
-        isActive: user.isActive,
       },
-      message: "Registration successful. Please login to access your account.",
+      message: "You have created a staff account.",
     });
     return;
   } catch (err: any) {
@@ -160,17 +146,17 @@ export const login = async (
   next: NextFunction
 ) => {
   try {
-    const { email, password } = (req.body ?? {}) as {
-      email: string;
+    const { phone, password } = (req.body ?? {}) as {
+      phone: string;
       password: string;
     };
 
     // Basic validation
-    if (!email) {
+    if (!phone) {
       res.status(400).json({
         success: false,
         message: "Validation failed",
-        details: [{ field: "email", message: "email is required" }],
+        details: [{ field: "phone", message: "phone is required" }],
       });
       return;
     }
@@ -183,26 +169,23 @@ export const login = async (
       return;
     }
 
-    const probe = email.trim().toLowerCase();
-    console.log("🔍 Looking for user with email:", probe);
+    const probe = phone.trim();
+    console.log("🔍 Looking for user with phone:", probe);
 
     const user = await User.findOne({
-      email: probe,
+      phone: probe,
     })
-      .select(
-        "password failedLoginCount lockUntil tokenVersion isActive role email name"
-      )
+      .select("password role phone name email")
       .exec();
 
     console.log("👤 User found:", user ? "Yes" : "No");
     if (user) {
-      console.log("📧 User email:", user.email);
+      console.log("📱 User phone:", user.phone);
       console.log("🔒 Has password field:", !!user.password);
       console.log(
         "🔒 Password hash:",
         user.password ? user.password.substring(0, 20) + "..." : "None"
       );
-      console.log("✅ Is active:", user.isActive);
     }
 
     // If user not found, equalize timing and return generic error
@@ -211,33 +194,7 @@ export const login = async (
       res.status(400).json({
         success: false,
         message: "Invalid credentials",
-        details: [{ message: "Invalid email or password" }],
-      });
-      return;
-    }
-
-    // Locked?
-    if (isLocked(user)) {
-      const mins = Math.ceil((user.lockUntil!.getTime() - Date.now()) / 60000);
-      res.status(423).json({
-        success: false,
-        message: "Account locked",
-        details: [{ message: `Try again in ${mins} minute(s)` }],
-      });
-      return;
-    }
-
-    // Status checks
-    if (!user.isActive) {
-      res.status(403).json({
-        success: false,
-        message: "Your account has been suspended",
-        details: [
-          {
-            message:
-              "Your account is currently suspended. Please contact support for assistance.",
-          },
-        ],
+        details: [{ message: "Invalid phone number or password" }],
       });
       return;
     }
@@ -249,7 +206,7 @@ export const login = async (
       res.status(400).json({
         success: false,
         message: "Invalid credentials",
-        details: [{ message: "Invalid email or password" }],
+        details: [{ message: "Invalid phone number or password" }],
       });
       return;
     }
@@ -259,30 +216,21 @@ export const login = async (
     console.log("🔐 Password verification result:", okPass);
 
     if (!okPass) {
-      lockUser(user);
-      await user.save();
-
       // Equalize a bit to blur timing between wrong-user and wrong-pass cases
       await timingEqualizer();
 
       res.status(400).json({
         success: false,
-        message: "Login failed: Incorrect email or password.",
+        message: "Login failed: Incorrect phone number or password.",
         details: [
           {
             message:
-              "The email or password you entered is incorrect. Please double-check your credentials and try again.",
+              "The phone number or password you entered is incorrect. Please double-check your credentials and try again.",
           },
         ],
       });
       return;
     }
-
-    // Clear lock state & update last login
-    clearLockState(user);
-    user.lastLogin = new Date();
-
-    await user.save();
 
     // --- Issue tokens ---
     const accessToken = signAccessToken({
@@ -296,15 +244,14 @@ export const login = async (
       _id: user._id.toString(),
       role: user.role,
       jti: newJti(),
-      tv: user.tokenVersion,
     });
 
     const safeUser = {
       id: user._id,
       name: user.name,
+      phone: user.phone,
       email: user.email,
       role: user.role,
-      isActive: user.isActive,
     };
 
     // ---------------------- WEB RESPONSE --------------------------
@@ -357,7 +304,7 @@ export const refreshToken = async (
     const payload = verifyRefreshToken(token);
 
     const user = await User.findById(payload.id).select(
-      "email name role isActive tokenVersion"
+      "email name role phone"
     );
 
     if (!user) {
@@ -365,31 +312,6 @@ export const refreshToken = async (
         success: false,
         message: "Invalid token",
         details: [{ message: "User not found" }],
-        data: null,
-      });
-      return;
-    }
-
-    if (!user.isActive) {
-      res.status(403).json({
-        success: false,
-        message: "Account not active",
-        details: [
-          { message: "Please contact support or reactivate your account" },
-        ],
-        data: null,
-      });
-      return;
-    }
-
-    const tvFromToken = Number(payload.tv);
-    const tvFromUser = Number(user.tokenVersion ?? 0);
-
-    if (!Number.isFinite(tvFromToken) || tvFromToken !== tvFromUser) {
-      res.status(401).json({
-        success: false,
-        message: "Invalid token",
-        details: [{ message: "Token version mismatch" }],
         data: null,
       });
       return;
@@ -471,4 +393,119 @@ export const profile = async (req: Request, res: Response) => {
   }
 
   res.json(req.user);
+};
+
+export const updateProfile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const { name, email, phone } = req.body;
+    const userRole = req.user.role;
+
+    // Determine which fields can be updated based on role
+    const updateData: { name?: string; email?: string; phone?: string } = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined && userRole === "owner") {
+      updateData.phone = phone;
+    }
+
+    const updatedUser = await svc.updateUserProfile(
+      req.user.id,
+      updateData,
+      userRole
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+      },
+    });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
+  }
+};
+
+export const changePassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    await svc.changeUserPassword(req.user.id, currentPassword, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
+  }
+};
+
+export const resetStaffPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    await svc.resetStaffPassword(id, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: "Staff password reset successfully",
+    });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+      });
+      return;
+    }
+    next(err);
+  }
 };

@@ -24,36 +24,36 @@ export const initSockets = (
   io.on("connection", (socket) => {
     console.log(`🔌 Client connected: ${socket.id}`);
 
-    // Admin/cashiers subscribe to all order events
-    socket.on("join-admin", () => {
-      socket.join("admin:orders");
-      console.log(`👨‍💼 Admin joined: ${socket.id}`);
+    // Owner/cashiers subscribe to all order events
+    socket.on("join-owner", () => {
+      socket.join("owner:orders");
+      console.log(`👑 Owner joined: ${socket.id}`);
     });
 
-    // Admin subscriptions for different modules
-    socket.on("join-admin-orders", () => {
-      socket.join("admin:orders");
-      console.log(`📋 Admin joined orders: ${socket.id}`);
+    // Owner subscriptions for different modules
+    socket.on("join-owner-orders", () => {
+      socket.join("owner:orders");
+      console.log(`📋 Owner joined orders: ${socket.id}`);
     });
 
-    socket.on("join-admin-items", () => {
-      socket.join("admin:items");
-      console.log(`🍽️ Admin joined items: ${socket.id}`);
+    socket.on("join-owner-items", () => {
+      socket.join("owner:items");
+      console.log(`🍽️ Owner joined items: ${socket.id}`);
     });
 
-    socket.on("join-admin-categories", () => {
-      socket.join("admin:categories");
-      console.log(`📁 Admin joined categories: ${socket.id}`);
+    socket.on("join-owner-categories", () => {
+      socket.join("owner:categories");
+      console.log(`📁 Owner joined categories: ${socket.id}`);
     });
 
-    socket.on("join-admin-users", () => {
-      socket.join("admin:users");
-      console.log(`👥 Admin joined users: ${socket.id}`);
+    socket.on("join-owner-users", () => {
+      socket.join("owner:users");
+      console.log(`👥 Owner joined users: ${socket.id}`);
     });
 
-    socket.on("join-admin-dashboard", () => {
-      socket.join("admin:dashboard");
-      console.log(`📊 Admin joined dashboard: ${socket.id}`);
+    socket.on("join-owner-dashboard", () => {
+      socket.join("owner:dashboard");
+      console.log(`📊 Owner joined dashboard: ${socket.id}`);
     });
 
     // Cashiers subscribe to new orders
@@ -69,12 +69,12 @@ export const initSockets = (
       console.log(`🍽️ Waiter ${waiterId} joined: ${socket.id}`);
     });
 
-    // Owner subscriptions
-    socket.on("join-owner", () => {
+    // Owner full access subscriptions (legacy support - also joins owner:orders)
+    socket.on("join-owner-full", () => {
       socket.join("owner:inventory");
       socket.join("owner:dashboard");
-      socket.join("admin:orders");
-      console.log(`👑 Owner joined: ${socket.id}`);
+      socket.join("owner:orders");
+      console.log(`👑 Owner joined with full access: ${socket.id}`);
     });
 
     // Customers subscribe with their private channel (uuid)
