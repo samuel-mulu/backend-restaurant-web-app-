@@ -176,12 +176,9 @@ export const listOrders = async (
     }
   }
 
-  // Search functionality - search by orderNumber or tableNumber
-  if (filters.search) {
-    const searchRegex = { $regex: filters.search, $options: "i" };
-    query.$or = [{ orderNumber: searchRegex }, { tableNumber: searchRegex }];
-  }
-
+  // Handle search separately to avoid conflicts with other filters
+  // First, get all orders matching base filters (status, waiterId, cashierId, dates, etc.)
+  // We populate waiter and cashier first so we can search in their names/emails
   let orders = await Order.find(query)
     .sort({ createdAt: -1 })
     .populate({
@@ -196,33 +193,60 @@ export const listOrders = async (
     .populate("confirmedBy", "name email phone")
     .populate("disputedBy", "name email phone");
 
-  // If search is provided, also filter by waiter/cashier names (client-side after populate)
-  if (filters.search) {
-    const searchLower = filters.search.toLowerCase();
-    orders = orders.filter((order: any) => {
-      const waiterName =
+  // If search is provided, filter by search term (case-insensitive)
+  // Search across: orderNumber, tableNumber, waiter name/email, cashier name/email
+  if (filters.search && filters.search.trim()) {
+    const searchTerm = filters.search.trim().toLowerCase();
+    const filteredOrders = orders.filter((order: any) => {
+      // Search in orderNumber (case-insensitive, partial match)
+      const orderNumberMatch =
+        order.orderNumber &&
+        String(order.orderNumber).toLowerCase().includes(searchTerm);
+
+      // Search in tableNumber (case-insensitive)
+      const tableNumberMatch =
+        order.tableNumber &&
+        String(order.tableNumber).toLowerCase().includes(searchTerm);
+
+      // Search in waiter name (case-insensitive)
+      const waiterNameMatch =
         order.waiterId &&
         typeof order.waiterId === "object" &&
-        "name" in order.waiterId
-          ? String(order.waiterId.name || "").toLowerCase()
-          : "";
-      const cashierName =
+        order.waiterId.name &&
+        String(order.waiterId.name).toLowerCase().includes(searchTerm);
+
+      // Search in waiter email (case-insensitive)
+      const waiterEmailMatch =
+        order.waiterId &&
+        typeof order.waiterId === "object" &&
+        order.waiterId.email &&
+        String(order.waiterId.email).toLowerCase().includes(searchTerm);
+
+      // Search in cashier name (case-insensitive)
+      const cashierNameMatch =
         order.cashierId &&
         typeof order.cashierId === "object" &&
-        "name" in order.cashierId
-          ? String(order.cashierId.name || "").toLowerCase()
-          : "";
+        order.cashierId.name &&
+        String(order.cashierId.name).toLowerCase().includes(searchTerm);
+
+      // Search in cashier email (case-insensitive)
+      const cashierEmailMatch =
+        order.cashierId &&
+        typeof order.cashierId === "object" &&
+        order.cashierId.email &&
+        String(order.cashierId.email).toLowerCase().includes(searchTerm);
+
+      // Return true if any field matches
       return (
-        String(order.orderNumber || "")
-          .toLowerCase()
-          .includes(searchLower) ||
-        String(order.tableNumber || "")
-          .toLowerCase()
-          .includes(searchLower) ||
-        waiterName.includes(searchLower) ||
-        cashierName.includes(searchLower)
+        orderNumberMatch ||
+        tableNumberMatch ||
+        waiterNameMatch ||
+        waiterEmailMatch ||
+        cashierNameMatch ||
+        cashierEmailMatch
       );
     });
+    return filteredOrders as OrderDoc[];
   }
 
   return orders;
