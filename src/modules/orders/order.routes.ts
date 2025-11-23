@@ -56,6 +56,14 @@ router.get(
   orderCtrl.getDateRangeReport
 );
 
+// Bulk update order statuses (Cashier/Owner can update)
+router.patch(
+  "/bulk/status",
+  requireAuth,
+  requireRole("cashier", "owner"),
+  orderCtrl.bulkUpdateStatus
+);
+
 // Update order status (Cashier/Owner can update)
 router.patch(
   "/:id/status",

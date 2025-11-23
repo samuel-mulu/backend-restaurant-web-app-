@@ -272,9 +272,9 @@ export const getOrder = async (id: string): Promise<OrderDoc | null> => {
 // Valid status transitions
 const validStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
   OPEN: ["VOIDED", "PAID_TO_CASHIER"],
-  VOIDED: [], // Terminal state
+  VOIDED: [], // Terminal state - cannot be changed
   PAID_TO_CASHIER: ["TRANSFERRED_TO_OWNER", "DISPUTED"],
-  TRANSFERRED_TO_OWNER: ["OWNER_CONFIRMED", "DISPUTED"],
+  TRANSFERRED_TO_OWNER: [], // Terminal state - cannot be changed once transferred
   DISPUTED: ["PAID_TO_CASHIER", "TRANSFERRED_TO_OWNER"],
   OWNER_CONFIRMED: [], // Terminal state
 };
@@ -360,25 +360,18 @@ export const updateOrderStatus = async (
   }
 
   if (user.role === "owner") {
-    // Owner can: TRANSFERRED_TO_OWNER → OWNER_CONFIRMED or DISPUTED
-    if (
-      order.status === "TRANSFERRED_TO_OWNER" &&
-      status !== "OWNER_CONFIRMED" &&
-      status !== "DISPUTED"
-    ) {
+    // Owner cannot change TRANSFERRED_TO_OWNER status (terminal state)
+    if (order.status === "TRANSFERRED_TO_OWNER") {
       throw {
         status: 403,
-        message:
-          "Owner can only confirm or dispute from TRANSFERRED_TO_OWNER status",
+        message: "Orders with TRANSFERRED_TO_OWNER status cannot be changed",
       };
     }
     // Owner cannot perform other transitions
-    if (order.status !== "TRANSFERRED_TO_OWNER") {
-      throw {
-        status: 403,
-        message: "Owner can only update orders in TRANSFERRED_TO_OWNER status",
-      };
-    }
+    throw {
+      status: 403,
+      message: "Owner can only update orders in TRANSFERRED_TO_OWNER status",
+    };
   }
 
   // Set status, corresponding timestamp, and user tracking
@@ -416,6 +409,192 @@ export const updateOrderStatus = async (
   notifyCustomerOrderUpdated(order, { updatedFields: { status } });
 
   return order;
+};
+
+/**
+ * Bulk update order statuses
+ * Only updates orders that have the same current status
+ */
+export const bulkUpdateOrderStatus = async (
+  orderIds: string[],
+  newStatus: OrderStatus,
+  userId: string
+): Promise<{
+  updated: OrderDoc[];
+  failed: Array<{ id: string; reason: string }>;
+}> => {
+  if (!orderIds || orderIds.length === 0) {
+    throw { status: 400, message: "Order IDs are required" };
+  }
+
+  // Validate user permissions
+  const user = await User.findById(userId);
+  if (!user) {
+    throw { status: 401, message: "User not found" };
+  }
+
+  // Waiter has no status update permissions
+  if (user.role === "waiter") {
+    throw {
+      status: 403,
+      message: "Waiters do not have permission to update order status",
+    };
+  }
+
+  const updated: OrderDoc[] = [];
+  const failed: Array<{ id: string; reason: string }> = [];
+
+  // Get all orders first to check their current status
+  const orders = await Order.find({
+    _id: { $in: orderIds.map((id) => new Types.ObjectId(id)) },
+  });
+
+  if (orders.length === 0) {
+    throw { status: 404, message: "No orders found" };
+  }
+
+  // Check if all orders have the same status
+  const firstOrderStatus = orders[0].status;
+  const allSameStatus = orders.every(
+    (order) => order.status === firstOrderStatus
+  );
+
+  if (!allSameStatus) {
+    throw {
+      status: 400,
+      message: "All selected orders must have the same status",
+    };
+  }
+
+  // Validate status transition for the common status
+  const allowedTransitions = validStatusTransitions[firstOrderStatus];
+  if (!allowedTransitions.includes(newStatus)) {
+    throw {
+      status: 400,
+      message: `Invalid status transition from ${firstOrderStatus} to ${newStatus}`,
+    };
+  }
+
+  // Role-based permission validation for the transition
+  if (user.role === "cashier") {
+    // Cashier can: OPEN → VOIDED or PAID_TO_CASHIER
+    if (
+      firstOrderStatus === "OPEN" &&
+      newStatus !== "VOIDED" &&
+      newStatus !== "PAID_TO_CASHIER"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Cashier can only void or mark as paid to cashier from OPEN status",
+      };
+    }
+    // Cashier can: PAID_TO_CASHIER → TRANSFERRED_TO_OWNER
+    if (
+      firstOrderStatus === "PAID_TO_CASHIER" &&
+      newStatus !== "TRANSFERRED_TO_OWNER"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Cashier can only mark as transferred to owner from PAID_TO_CASHIER status",
+      };
+    }
+    // Cashier can: DISPUTED → PAID_TO_CASHIER or TRANSFERRED_TO_OWNER (resolve dispute)
+    if (
+      firstOrderStatus === "DISPUTED" &&
+      newStatus !== "PAID_TO_CASHIER" &&
+      newStatus !== "TRANSFERRED_TO_OWNER"
+    ) {
+      throw {
+        status: 403,
+        message:
+          "Cashier can only resolve dispute by marking as paid to cashier or transferred to owner",
+      };
+    }
+    // Cashier cannot perform other transitions
+    if (!["OPEN", "PAID_TO_CASHIER", "DISPUTED"].includes(firstOrderStatus)) {
+      throw {
+        status: 403,
+        message: "Cashier does not have permission for this status transition",
+      };
+    }
+  }
+
+  if (user.role === "owner") {
+    // Owner cannot change TRANSFERRED_TO_OWNER status (terminal state)
+    if (firstOrderStatus === "TRANSFERRED_TO_OWNER") {
+      throw {
+        status: 403,
+        message: "Orders with TRANSFERRED_TO_OWNER status cannot be changed",
+      };
+    }
+    // Owner cannot perform other transitions
+    throw {
+      status: 403,
+      message: "Owner can only update orders in TRANSFERRED_TO_OWNER status",
+    };
+  }
+
+  // Update all orders
+  const now = new Date();
+  const userIdObjectId = new Types.ObjectId(userId);
+
+  for (const order of orders) {
+    try {
+      // Double-check status hasn't changed (race condition protection)
+      if (order.status !== firstOrderStatus) {
+        failed.push({
+          id: String(order._id),
+          reason: `Order status changed from ${firstOrderStatus} to ${order.status}`,
+        });
+        continue;
+      }
+
+      // Set status, corresponding timestamp, and user tracking
+      order.status = newStatus;
+
+      if (newStatus === "VOIDED") {
+        order.cancelledAt = now;
+        order.cancelledBy = userIdObjectId as any;
+      } else if (newStatus === "PAID_TO_CASHIER") {
+        order.paymentReceivedAt = now;
+      } else if (newStatus === "TRANSFERRED_TO_OWNER") {
+        order.paymentDeliveredAt = now;
+        order.transferredToOwnerBy = userIdObjectId as any;
+      } else if (newStatus === "OWNER_CONFIRMED") {
+        order.completedAt = now;
+        order.confirmedBy = userIdObjectId as any;
+      } else if (newStatus === "DISPUTED") {
+        order.disputedBy = userIdObjectId as any;
+      }
+
+      await order.save();
+
+      // Populate fields
+      await order.populate(
+        "items.itemId",
+        "name description price images isAvailable ingredients"
+      );
+      await order.populate("waiterId", "name email phone");
+      await order.populate("cashierId", "name email phone");
+      await populateUserTrackingFields(order);
+
+      // Broadcast status change
+      notifyCustomerOrderUpdated(order, {
+        updatedFields: { status: newStatus },
+      });
+
+      updated.push(order);
+    } catch (error: any) {
+      failed.push({
+        id: String(order._id),
+        reason: error.message || "Failed to update order",
+      });
+    }
+  }
+
+  return { updated, failed };
 };
 
 export interface UpdateOrderInput {

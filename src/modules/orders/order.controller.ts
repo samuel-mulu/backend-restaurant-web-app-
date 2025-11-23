@@ -91,6 +91,42 @@ export const updateStatus = async (req: Request, res: Response) => {
   }
 };
 
+export const bulkUpdateStatus = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const { orderIds, status } = req.body;
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ error: "Order IDs array is required" });
+    }
+    if (!status) {
+      return res.status(400).json({ error: "Status is required" });
+    }
+
+    const result = await orderService.bulkUpdateOrderStatus(
+      orderIds,
+      status,
+      req.user._id
+    );
+
+    res.json({
+      success: true,
+      updated: result.updated,
+      failed: result.failed,
+      message: `Updated ${result.updated.length} order(s)${result.failed.length > 0 ? `, ${result.failed.length} failed` : ""}`,
+    });
+  } catch (error: any) {
+    console.error("Error bulk updating order status:", error);
+    if (error.status) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: "Failed to bulk update order status" });
+  }
+};
+
 export const update = async (req: Request, res: Response) => {
   try {
     const order = await orderService.updateOrder(req.params.id, req.body);
