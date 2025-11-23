@@ -29,11 +29,18 @@ export const list = async (req: Request, res: Response) => {
       endDate: req.query.endDate
         ? new Date(req.query.endDate as string)
         : undefined,
+      search: req.query.search as string,
+      tableNumber: req.query.tableNumber as string,
     };
 
     // If waiter, only show their orders
     if (req.user?.role === "waiter") {
       filters.waiterId = req.user._id;
+    }
+
+    // If cashier, only show orders they created (unless owner is viewing)
+    if (req.user?.role === "cashier" && !req.query.cashierId) {
+      filters.cashierId = req.user._id;
     }
 
     const orders = await orderService.listOrders(filters);

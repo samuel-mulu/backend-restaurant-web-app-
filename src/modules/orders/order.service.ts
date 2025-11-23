@@ -141,6 +141,8 @@ export interface ListOrdersFilters {
   cashierId?: string;
   startDate?: Date;
   endDate?: Date;
+  search?: string; // Search by orderNumber, tableNumber, waiter name, cashier name
+  tableNumber?: string;
 }
 
 export const listOrders = async (
@@ -160,6 +162,10 @@ export const listOrders = async (
     query.cashierId = new Types.ObjectId(filters.cashierId);
   }
 
+  if (filters.tableNumber) {
+    query.tableNumber = { $regex: filters.tableNumber, $options: "i" };
+  }
+
   if (filters.startDate || filters.endDate) {
     query.createdAt = {};
     if (filters.startDate) {
@@ -170,7 +176,13 @@ export const listOrders = async (
     }
   }
 
-  const orders = await Order.find(query)
+  // Search functionality - search by orderNumber or tableNumber
+  if (filters.search) {
+    const searchRegex = { $regex: filters.search, $options: "i" };
+    query.$or = [{ orderNumber: searchRegex }, { tableNumber: searchRegex }];
+  }
+
+  let orders = await Order.find(query)
     .sort({ createdAt: -1 })
     .populate({
       path: "items.itemId",
@@ -183,6 +195,35 @@ export const listOrders = async (
     .populate("transferredToOwnerBy", "name email phone")
     .populate("confirmedBy", "name email phone")
     .populate("disputedBy", "name email phone");
+
+  // If search is provided, also filter by waiter/cashier names (client-side after populate)
+  if (filters.search) {
+    const searchLower = filters.search.toLowerCase();
+    orders = orders.filter((order: any) => {
+      const waiterName =
+        order.waiterId &&
+        typeof order.waiterId === "object" &&
+        "name" in order.waiterId
+          ? String(order.waiterId.name || "").toLowerCase()
+          : "";
+      const cashierName =
+        order.cashierId &&
+        typeof order.cashierId === "object" &&
+        "name" in order.cashierId
+          ? String(order.cashierId.name || "").toLowerCase()
+          : "";
+      return (
+        String(order.orderNumber || "")
+          .toLowerCase()
+          .includes(searchLower) ||
+        String(order.tableNumber || "")
+          .toLowerCase()
+          .includes(searchLower) ||
+        waiterName.includes(searchLower) ||
+        cashierName.includes(searchLower)
+      );
+    });
+  }
 
   return orders;
 };
