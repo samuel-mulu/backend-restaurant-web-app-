@@ -31,7 +31,7 @@ router.get(
 router.get(
   "/reports/cashier/:cashierId",
   requireAuth,
-  requireRole("owner"),
+  requireRole("cashier", "owner"),
   orderCtrl.getCashierReport
 );
 

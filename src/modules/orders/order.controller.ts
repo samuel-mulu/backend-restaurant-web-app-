@@ -115,7 +115,9 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       success: true,
       updated: result.updated,
       failed: result.failed,
-      message: `Updated ${result.updated.length} order(s)${result.failed.length > 0 ? `, ${result.failed.length} failed` : ""}`,
+      message: `Updated ${result.updated.length} order(s)${
+        result.failed.length > 0 ? `, ${result.failed.length} failed` : ""
+      }`,
     });
   } catch (error: any) {
     console.error("Error bulk updating order status:", error);
@@ -231,6 +233,15 @@ export const getDailyReport = async (req: Request, res: Response) => {
 export const getCashierReport = async (req: Request, res: Response) => {
   try {
     const { cashierId } = req.params;
+    const user = req.user;
+
+    // If user is cashier, they can only access their own report
+    if (user?.role === "cashier" && user._id?.toString() !== cashierId) {
+      return res.status(403).json({
+        error: "You can only access your own cashier report",
+      });
+    }
+
     const startDate = req.query.startDate
       ? new Date(req.query.startDate as string)
       : undefined;

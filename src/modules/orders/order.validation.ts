@@ -2,7 +2,7 @@ import Joi from "joi";
 import { Types } from "mongoose";
 
 export const createOrderSchema = Joi.object({
-  tableNumber: Joi.string().required(),
+  tableNumber: Joi.string().optional(),
   peopleCount: Joi.number().integer().min(1).optional(),
   items: Joi.array()
     .items(

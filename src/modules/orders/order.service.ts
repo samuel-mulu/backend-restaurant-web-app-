@@ -40,7 +40,7 @@ const generateOrderNumber = async (): Promise<string> => {
 };
 
 export type CreateOrderInput = {
-  tableNumber: string;
+  tableNumber?: string; // Optional table number
   items: {
     itemId: string;
     qty: number;
