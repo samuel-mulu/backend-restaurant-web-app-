@@ -9,23 +9,22 @@ export const createStaffSchema = Joi.object({
     then: Joi.string().required().min(6),
     otherwise: Joi.string().optional().allow("", null),
   }),
-  phone: Joi.string()
-    .when("role", {
-      is: Joi.string().valid("cashier", "waiter"),
-      then: Joi.string()
-        .required()
-        .pattern(
-          /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
-        )
-        .message("Phone number must be a valid format"),
-      otherwise: Joi.string()
-        .optional()
-        .allow("", null)
-        .pattern(
-          /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
-        )
-        .message("Phone number must be a valid format"),
-    }),
+  phone: Joi.string().when("role", {
+    is: Joi.string().valid("cashier", "waiter"),
+    then: Joi.string()
+      .required()
+      .pattern(
+        /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
+      )
+      .message("Phone number must be a valid format"),
+    otherwise: Joi.string()
+      .optional()
+      .allow("", null)
+      .pattern(
+        /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
+      )
+      .message("Phone number must be a valid format"),
+  }),
   role: Joi.string().valid("cashier", "waiter", "staff").required(),
   salary: Joi.number().min(0).required(),
 });

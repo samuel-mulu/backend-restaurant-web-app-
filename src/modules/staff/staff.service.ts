@@ -80,7 +80,11 @@ export const getStaffById = async (id: string): Promise<UserDoc | null> => {
   }
 
   // Validate it's a staff member (cashier, waiter, or staff)
-  if (staff.role !== "cashier" && staff.role !== "waiter" && staff.role !== "staff") {
+  if (
+    staff.role !== "cashier" &&
+    staff.role !== "waiter" &&
+    staff.role !== "staff"
+  ) {
     throw new Error("User is not a staff member");
   }
 
@@ -99,18 +103,31 @@ export const createStaff = async (
   }
 
   // Validate role
-  if (data.role !== "cashier" && data.role !== "waiter" && data.role !== "staff") {
+  if (
+    data.role !== "cashier" &&
+    data.role !== "waiter" &&
+    data.role !== "staff"
+  ) {
     throw { status: 400, message: "Role must be cashier, waiter, or staff" };
   }
 
   // Password is required for cashier and waiter roles
   if ((data.role === "cashier" || data.role === "waiter") && !data.password) {
-    throw { status: 400, message: "Password is required for cashier and waiter roles" };
+    throw {
+      status: 400,
+      message: "Password is required for cashier and waiter roles",
+    };
   }
 
   // Phone is required for cashier and waiter roles
-  if ((data.role === "cashier" || data.role === "waiter") && (!data.phone || !data.phone.trim())) {
-    throw { status: 400, message: "Phone is required for cashier and waiter roles" };
+  if (
+    (data.role === "cashier" || data.role === "waiter") &&
+    (!data.phone || !data.phone.trim())
+  ) {
+    throw {
+      status: 400,
+      message: "Phone is required for cashier and waiter roles",
+    };
   }
 
   // Check if email exists (only if email is provided)
@@ -137,7 +154,10 @@ export const createStaff = async (
     hashedPassword = await hashPassword(data.password);
   } else if (data.role === "cashier" || data.role === "waiter") {
     // This should not happen due to validation above, but double-check
-    throw { status: 400, message: "Password is required for cashier and waiter roles" };
+    throw {
+      status: 400,
+      message: "Password is required for cashier and waiter roles",
+    };
   }
 
   // Build user object
@@ -164,7 +184,9 @@ export const createStaff = async (
   } else if (data.role === "staff") {
     // For staff role, generate a random password that won't be used for login
     // This satisfies the required password field in the schema
-    userData.password = await hashPassword(`staff_${Date.now()}_${Math.random()}`);
+    userData.password = await hashPassword(
+      `staff_${Date.now()}_${Math.random()}`
+    );
   }
 
   const staff = await User.create(userData);
@@ -186,12 +208,21 @@ export const updateStaff = async (
   }
 
   // Validate it's a staff member
-  if (staff.role !== "cashier" && staff.role !== "waiter" && staff.role !== "staff") {
+  if (
+    staff.role !== "cashier" &&
+    staff.role !== "waiter" &&
+    staff.role !== "staff"
+  ) {
     throw { status: 400, message: "User is not a staff member" };
   }
 
   // Validate role if provided
-  if (data.role && data.role !== "cashier" && data.role !== "waiter" && data.role !== "staff") {
+  if (
+    data.role &&
+    data.role !== "cashier" &&
+    data.role !== "waiter" &&
+    data.role !== "staff"
+  ) {
     throw { status: 400, message: "Role must be cashier, waiter, or staff" };
   }
 
@@ -225,7 +256,11 @@ export const deleteStaff = async (id: string): Promise<UserDoc | null> => {
   }
 
   // Validate it's a staff member
-  if (staff.role !== "cashier" && staff.role !== "waiter" && staff.role !== "staff") {
+  if (
+    staff.role !== "cashier" &&
+    staff.role !== "waiter" &&
+    staff.role !== "staff"
+  ) {
     throw { status: 400, message: "User is not a staff member" };
   }
 
