@@ -18,7 +18,7 @@ const demoUsers = [
     name: "Sarah Cashier",
     email: "cashier@restaurant.com",
     phone: "+1234567891",
-    password: "cashier123",
+    password: "cashier123", 
     role: "cashier" as Role,
     salary: 2500,
   },

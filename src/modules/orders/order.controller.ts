@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as orderService from "./order.service";
+import { OrderStatus } from "./order.model";
 
 export const create = async (req: Request, res: Response) => {
   try {
@@ -158,7 +159,52 @@ export const getByWaiter = async (req: Request, res: Response) => {
 
 export const getByCashier = async (req: Request, res: Response) => {
   try {
-    const orders = await orderService.getOrdersByCashier(req.params.cashierId);
+    const { cashierId } = req.params;
+    const { status, waiterId, startDate, endDate } = req.query;
+
+    let filters:
+      | {
+          status?: OrderStatus | OrderStatus[];
+          waiterId?: string;
+          startDate?: Date;
+          endDate?: Date;
+        }
+      | undefined = undefined;
+
+    if (
+      status ||
+      (waiterId && typeof waiterId === "string") ||
+      (startDate && typeof startDate === "string") ||
+      (endDate && typeof endDate === "string")
+    ) {
+      filters = {};
+      if (status) {
+        // Handle array of statuses (comma-separated string or array)
+        if (Array.isArray(status)) {
+          filters.status = status as OrderStatus[];
+        } else if (typeof status === "string") {
+          // Check if comma-separated
+          if (status.includes(",")) {
+            filters.status = status
+              .split(",")
+              .map((s) => s.trim()) as OrderStatus[];
+          } else {
+            filters.status = status as OrderStatus;
+          }
+        }
+      }
+      if (waiterId && typeof waiterId === "string") {
+        filters.waiterId = waiterId;
+      }
+      if (startDate && typeof startDate === "string") {
+        filters.startDate = new Date(startDate);
+      }
+      if (endDate && typeof endDate === "string") {
+        filters.endDate = new Date(endDate);
+      }
+    }
+
+    const orders = await orderService.getOrdersByCashier(cashierId, filters);
     res.json(orders);
   } catch (error) {
     console.error("Error getting orders by cashier:", error);

@@ -684,9 +684,45 @@ export const getOrdersByWaiter = async (
 };
 
 export const getOrdersByCashier = async (
-  cashierId: string
+  cashierId: string,
+  filters?: {
+    status?: OrderStatus | OrderStatus[];
+    waiterId?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }
 ): Promise<OrderDoc[]> => {
-  return await Order.find({ cashierId: new Types.ObjectId(cashierId) })
+  const query: any = { cashierId: new Types.ObjectId(cashierId) };
+
+  // Add status filter if provided (supports single status or array of statuses)
+  if (filters?.status) {
+    if (Array.isArray(filters.status)) {
+      query.status = { $in: filters.status };
+    } else {
+      query.status = filters.status;
+    }
+  }
+
+  // Add waiter filter if provided
+  if (filters?.waiterId) {
+    query.waiterId = new Types.ObjectId(filters.waiterId);
+  }
+
+  // Add date range filter if provided
+  if (filters?.startDate || filters?.endDate) {
+    query.createdAt = {};
+    if (filters.startDate) {
+      query.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      // Set end date to end of day (23:59:59.999)
+      const endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = endDate;
+    }
+  }
+
+  return await Order.find(query)
     .sort({ createdAt: -1 })
     .populate({
       path: "items.itemId",
