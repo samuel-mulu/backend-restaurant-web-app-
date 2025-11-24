@@ -8,7 +8,7 @@ export interface UserDoc extends Document {
   email?: string;
   password: string;
   role: Role;
-  phone: string;
+  phone?: string;
   salary?: number;
   isDeleted?: boolean;
   deletedAt?: Date;
@@ -30,10 +30,16 @@ const UserSchema = new Schema<UserDoc>(
     password: { type: String, required: true },
     role: {
       type: String,
-      enum: ["owner", "cashier", "waiter"],
+      enum: ["owner", "cashier", "waiter", "staff"],
       default: "cashier",
     },
-    phone: { type: String, required: true, unique: true, index: true },
+    phone: {
+      type: String,
+      required: false,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     salary: { type: Number, min: 0 },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,

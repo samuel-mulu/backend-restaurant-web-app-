@@ -3,16 +3,31 @@ import { Types } from "mongoose";
 
 export const createStaffSchema = Joi.object({
   name: Joi.string().required().trim().min(2).max(100),
-  email: Joi.string().email().required().lowercase().trim(),
-  password: Joi.string().required().min(6),
+  email: Joi.string().email().optional().lowercase().trim().allow("", null),
+  password: Joi.string().when("role", {
+    is: Joi.string().valid("cashier", "waiter"),
+    then: Joi.string().required().min(6),
+    otherwise: Joi.string().optional().allow("", null),
+  }),
   phone: Joi.string()
-    .required()
-    .pattern(
-      /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
-    )
-    .message("Phone number must be a valid format"),
-  role: Joi.string().valid("cashier", "waiter").required(),
-  salary: Joi.number().min(0).optional(),
+    .when("role", {
+      is: Joi.string().valid("cashier", "waiter"),
+      then: Joi.string()
+        .required()
+        .pattern(
+          /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
+        )
+        .message("Phone number must be a valid format"),
+      otherwise: Joi.string()
+        .optional()
+        .allow("", null)
+        .pattern(
+          /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
+        )
+        .message("Phone number must be a valid format"),
+    }),
+  role: Joi.string().valid("cashier", "waiter", "staff").required(),
+  salary: Joi.number().min(0).required(),
 });
 
 export const updateStaffSchema = Joi.object({
@@ -21,13 +36,14 @@ export const updateStaffSchema = Joi.object({
       /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
     )
     .message("Phone number must be a valid format")
-    .optional(),
+    .optional()
+    .allow("", null),
   salary: Joi.number().min(0).optional(),
-  role: Joi.string().valid("cashier", "waiter").optional(),
+  role: Joi.string().valid("cashier", "waiter", "staff").optional(),
 });
 
 export const listStaffSchema = Joi.object({
-  role: Joi.string().valid("cashier", "waiter").optional(),
+  role: Joi.string().valid("cashier", "waiter", "staff").optional(),
   search: Joi.string().optional(),
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(100).optional(),
