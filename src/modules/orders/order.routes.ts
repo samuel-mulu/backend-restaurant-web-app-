@@ -16,6 +16,13 @@ router.post(
 );
 
 // Protected routes
+// Owner history route (must be before generic /orders route)
+router.get(
+  "/owner",
+  requireAuth,
+  requireRole("owner"),
+  orderCtrl.getOwnerHistory
+);
 router.get("/", requireAuth, orderCtrl.list);
 router.get("/waiter/:waiterId", requireAuth, orderCtrl.getByWaiter);
 router.get("/cashier/:cashierId", requireAuth, orderCtrl.getByCashier);

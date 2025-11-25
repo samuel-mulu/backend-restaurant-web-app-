@@ -62,6 +62,41 @@ export const list = async (req: Request, res: Response) => {
   }
 };
 
+export const getOwnerHistory = async (req: Request, res: Response) => {
+  try {
+    // Properly handle date range - set startDate to beginning of day and endDate to end of day
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (req.query.startDate) {
+      startDate = new Date(req.query.startDate as string);
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    if (req.query.endDate) {
+      endDate = new Date(req.query.endDate as string);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    const filters = {
+      status: req.query.status as any,
+      waiterId: req.query.waiterId as string,
+      cashierId: req.query.cashierId as string,
+      startDate,
+      endDate,
+      search: req.query.search as string,
+      tableNumber: req.query.tableNumber as string,
+    };
+
+    // Owner can see all orders - no role-based filtering needed
+    const orders = await orderService.getOwnerOrders(filters);
+    res.json(orders);
+  } catch (error) {
+    console.error("Error getting owner history:", error);
+    res.status(500).json({ error: "Failed to get owner history" });
+  }
+};
+
 export const getOrder = async (req: Request, res: Response) => {
   try {
     const order = await orderService.getOrder(req.params.id);

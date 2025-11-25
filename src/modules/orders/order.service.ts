@@ -296,6 +296,121 @@ export const listOrders = async (
   return orders;
 };
 
+export const getOwnerOrders = async (
+  filters: ListOrdersFilters = {}
+): Promise<OrderDoc[]> => {
+  // Owner-specific order retrieval - no role-based restrictions
+  // Supports all filters: status, waiterId, cashierId, startDate, endDate, search, tableNumber
+  const query: any = {};
+
+  if (filters.status) {
+    query.status = filters.status;
+  }
+
+  if (filters.waiterId) {
+    query.waiterId = new Types.ObjectId(filters.waiterId);
+  }
+
+  if (filters.cashierId) {
+    query.cashierId = new Types.ObjectId(filters.cashierId);
+  }
+
+  if (filters.tableNumber) {
+    query.tableNumber = { $regex: filters.tableNumber, $options: "i" };
+  }
+
+  if (filters.startDate || filters.endDate) {
+    query.createdAt = {};
+    if (filters.startDate) {
+      // Ensure startDate is at beginning of day
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      query.createdAt.$gte = start;
+    }
+    if (filters.endDate) {
+      // Ensure endDate is at end of day
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = end;
+    }
+  }
+
+  // Handle search separately to avoid conflicts with other filters
+  // First, get all orders matching base filters (status, waiterId, cashierId, dates, etc.)
+  // We populate waiter and cashier first so we can search in their names/emails
+  let orders = await Order.find(query)
+    .sort({ createdAt: -1 })
+    .populate({
+      path: "items.itemId",
+      select: "name description price image isAvailable",
+      populate: { path: "category", select: "name" },
+    })
+    .populate("waiterId", "name email phone")
+    .populate("cashierId", "name email phone")
+    .populate("cancelledBy", "name email phone")
+    .populate("transferredToOwnerBy", "name email phone")
+    .populate("confirmedBy", "name email phone")
+    .populate("disputedBy", "name email phone");
+
+  // If search is provided, filter by search term (case-insensitive)
+  // Search across: orderNumber, tableNumber, waiter name/email, cashier name/email
+  if (filters.search && filters.search.trim()) {
+    const searchTerm = filters.search.trim().toLowerCase();
+    const filteredOrders = orders.filter((order: any) => {
+      // Search in orderNumber (case-insensitive, partial match)
+      const orderNumberMatch =
+        order.orderNumber &&
+        String(order.orderNumber).toLowerCase().includes(searchTerm);
+
+      // Search in tableNumber (case-insensitive)
+      const tableNumberMatch =
+        order.tableNumber &&
+        String(order.tableNumber).toLowerCase().includes(searchTerm);
+
+      // Search in waiter name (case-insensitive)
+      const waiterNameMatch =
+        order.waiterId &&
+        typeof order.waiterId === "object" &&
+        order.waiterId.name &&
+        String(order.waiterId.name).toLowerCase().includes(searchTerm);
+
+      // Search in waiter email (case-insensitive)
+      const waiterEmailMatch =
+        order.waiterId &&
+        typeof order.waiterId === "object" &&
+        order.waiterId.email &&
+        String(order.waiterId.email).toLowerCase().includes(searchTerm);
+
+      // Search in cashier name (case-insensitive)
+      const cashierNameMatch =
+        order.cashierId &&
+        typeof order.cashierId === "object" &&
+        order.cashierId.name &&
+        String(order.cashierId.name).toLowerCase().includes(searchTerm);
+
+      // Search in cashier email (case-insensitive)
+      const cashierEmailMatch =
+        order.cashierId &&
+        typeof order.cashierId === "object" &&
+        order.cashierId.email &&
+        String(order.cashierId.email).toLowerCase().includes(searchTerm);
+
+      // Return true if any field matches
+      return (
+        orderNumberMatch ||
+        tableNumberMatch ||
+        waiterNameMatch ||
+        waiterEmailMatch ||
+        cashierNameMatch ||
+        cashierEmailMatch
+      );
+    });
+    return filteredOrders as OrderDoc[];
+  }
+
+  return orders;
+};
+
 export const getOrder = async (id: string): Promise<OrderDoc | null> => {
   const order = await Order.findById(id)
     .populate({
