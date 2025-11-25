@@ -95,13 +95,6 @@ router.patch(
   orderCtrl.markAsPrinted
 );
 
-router.post(
-  "/:id/print-receipt",
-  requireAuth,
-  requireRole("cashier", "owner"),
-  orderCtrl.printOrder
-);
-
 // Get single order details (for customers with order code or authenticated users)
 router.get("/:id", orderCtrl.getOrder);
 

@@ -36,4 +36,8 @@ export const env = {
   smtpPass: process.env.SMTP_PASS as string,
   smtpFromName: process.env.SMTP_FROM_NAME || "Longtea",
   smtpFromEmail: process.env.SMTP_FROM_EMAIL as string,
+
+  // POS Printer Service
+  posPrinterUrl: process.env.POS_PRINTER_URL || "http://localhost:7777",
+  posPrinterKey: process.env.POS_PRINTER_KEY as string | undefined,
 };

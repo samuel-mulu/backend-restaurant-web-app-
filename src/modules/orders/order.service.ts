@@ -5,6 +5,8 @@ import {
   notifyCustomerOrderUpdated,
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
+import { formatReceipt } from "../../common/utils/receiptFormatter";
+import { printReceipt } from "../../common/utils/posPrinterClient";
 
 // Helper function to populate user tracking fields
 const populateUserTrackingFields = async (order: OrderDoc): Promise<void> => {
@@ -131,6 +133,16 @@ export const createOrder = async (
 
   // Broadcast the new order
   notifyCashiersNewOrder(order);
+
+  // Automatically print receipt when order is created (non-blocking)
+  const receiptText = formatReceipt(order);
+  printReceipt(receiptText).catch((error) => {
+    // Silent fail - printing shouldn't block order creation
+    console.warn(
+      `[PRINT] Failed for order ${order.orderNumber}:`,
+      error.message || error
+    );
+  });
 
   return order;
 };
@@ -725,11 +737,47 @@ export async function printOrder(orderId: string) {
   const order = await Order.findById(orderId);
   if (!order) throw new Error("Order not found");
 
-  // For now, just return the order
-  // Printing functionality can be added later if needed
+  // Populate order with items and user details
+  await order.populate({
+    path: "items.itemId",
+    select: "name description price image isAvailable",
+    populate: { path: "category", select: "name" },
+  });
+  await order.populate("waiterId", "name email phone");
+  await order.populate("cashierId", "name email phone");
+  await populateUserTrackingFields(order);
+
   console.log(
     `[PRINT ORDER] Order ${order.orderNumber} requested for printing`
   );
+
+  // Format receipt text
+  const receiptText = formatReceipt(order);
+
+  // Send print request to POS Printer Service
+  try {
+    const printResult = await printReceipt(receiptText);
+
+    if (printResult.success) {
+      console.log(
+        `[PRINT ORDER] Successfully sent print job for order ${order.orderNumber}`
+      );
+    } else {
+      // Log warning but don't fail the request
+      // This allows order processing to continue even if printer is unavailable
+      console.warn(
+        `[PRINT ORDER] Print job failed for order ${order.orderNumber}:`,
+        printResult.error || printResult.message
+      );
+    }
+  } catch (error) {
+    // Log error but don't fail the request
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[PRINT ORDER] Unexpected error while printing order ${order.orderNumber}:`,
+      errorMessage
+    );
+  }
 
   return order;
 }
