@@ -7,6 +7,7 @@ export interface InventoryDoc extends Document {
   categoryId?: Types.ObjectId;
   quantity: number;
   unit: string;
+  price: number;
   minThreshold?: number;
   clientId?: string;
 
@@ -47,6 +48,12 @@ const InventorySchema = new Schema<InventoryDoc>(
       type: String,
       required: true,
       trim: true,
+    },
+
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
     },
 
     minThreshold: {

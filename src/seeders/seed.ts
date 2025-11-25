@@ -154,6 +154,7 @@ const inventoryItems = [
     categoryName: "Main Courses", // Will be set after category creation
     quantity: 50,
     unit: "bag",
+    price: 45.0,
     minThreshold: 10,
   },
   {
@@ -162,6 +163,7 @@ const inventoryItems = [
     categoryName: "Main Courses",
     quantity: 30,
     unit: "bottle",
+    price: 120.0,
     minThreshold: 5,
   },
   {
@@ -170,6 +172,7 @@ const inventoryItems = [
     categoryName: "Main Courses",
     quantity: 75,
     unit: "bag",
+    price: 35.0,
     minThreshold: 15,
   },
   {
@@ -178,6 +181,7 @@ const inventoryItems = [
     categoryName: "Coffee",
     quantity: 20,
     unit: "bag",
+    price: 85.0,
     minThreshold: 5,
   },
   {
@@ -186,6 +190,7 @@ const inventoryItems = [
     categoryName: "Main Courses",
     quantity: 100,
     unit: "bag",
+    price: 25.0,
     minThreshold: 20,
   },
 ];

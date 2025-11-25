@@ -12,6 +12,7 @@ export interface CreateInventoryInput {
   categoryId?: string;
   quantity: number;
   unit: string;
+  price: number;
   minThreshold?: number;
 }
 
@@ -20,6 +21,7 @@ export interface UpdateInventoryInput {
   description?: string;
   categoryId?: string;
   quantity?: number;
+  price?: number;
   minThreshold?: number;
 }
 
@@ -73,6 +75,9 @@ export const createInventory = async (
 ): Promise<InventoryDoc> => {
   if (data.quantity < 0)
     throw { status: 400, message: "Quantity cannot be negative" };
+  
+  if (data.price < 0)
+    throw { status: 400, message: "Price cannot be negative" };
 
   validateObjectId(data.categoryId || "", "Invalid category ID");
 
@@ -82,6 +87,7 @@ export const createInventory = async (
     categoryId: data.categoryId || undefined,
     quantity: data.quantity,
     unit: data.unit,
+    price: data.price,
     minThreshold: data.minThreshold ?? 0,
   });
 
@@ -114,6 +120,12 @@ export const updateInventory = async (
     if (data.quantity < 0)
       throw { status: 400, message: "Quantity cannot be negative" };
     inventory.quantity = data.quantity;
+  }
+
+  if (data.price !== undefined) {
+    if (data.price < 0)
+      throw { status: 400, message: "Price cannot be negative" };
+    inventory.price = data.price;
   }
 
   if (data.minThreshold !== undefined) {

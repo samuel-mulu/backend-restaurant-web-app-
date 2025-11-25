@@ -5,6 +5,7 @@ import {
   notifyCustomerOrderUpdated,
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
+import { Inventory } from "../inventory/inventory.model";
 
 // Helper function to populate user tracking fields
 const populateUserTrackingFields = async (order: OrderDoc): Promise<void> => {
@@ -94,6 +95,25 @@ export const createOrder = async (
     };
   }
 
+  // Validate inventory quantities before order creation
+  const inventoryItemsToUpdate: Array<{ inventory: any; qty: number }> = [];
+
+  for (const item of payload.items) {
+    // Check if this itemId exists in Inventory model
+    const inventory = await Inventory.findById(item.itemId);
+    if (inventory) {
+      // This is an inventory item - validate quantity
+      if (inventory.quantity < item.qty) {
+        throw {
+          status: 400,
+          message: `Insufficient quantity for ${inventory.name}. Available: ${inventory.quantity}, Requested: ${item.qty}`,
+        };
+      }
+      // Store for later decrement
+      inventoryItemsToUpdate.push({ inventory, qty: item.qty });
+    }
+  }
+
   const subtotal = payload.items.reduce(
     (s, it) => s + it.priceSnapshot * it.qty,
     0
@@ -118,6 +138,12 @@ export const createOrder = async (
     cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
     clientId: payload.clientId,
   });
+
+  // Decrement inventory quantities after order creation
+  for (const { inventory, qty } of inventoryItemsToUpdate) {
+    inventory.quantity -= qty;
+    await inventory.save();
+  }
 
   // Populate item details with categories before returning
   await order.populate({
