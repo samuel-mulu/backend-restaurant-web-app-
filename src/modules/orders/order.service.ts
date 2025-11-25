@@ -207,10 +207,16 @@ export const listOrders = async (
   if (filters.startDate || filters.endDate) {
     query.createdAt = {};
     if (filters.startDate) {
-      query.createdAt.$gte = filters.startDate;
+      // Ensure startDate is at beginning of day
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      query.createdAt.$gte = start;
     }
     if (filters.endDate) {
-      query.createdAt.$lte = filters.endDate;
+      // Ensure endDate is at end of day
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = end;
     }
   }
 
@@ -312,7 +318,7 @@ const validStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
   OPEN: ["VOIDED", "PAID_TO_CASHIER"],
   VOIDED: [], // Terminal state - cannot be changed
   PAID_TO_CASHIER: ["TRANSFERRED_TO_OWNER", "DISPUTED"],
-  TRANSFERRED_TO_OWNER: [], // Terminal state - cannot be changed once transferred
+  TRANSFERRED_TO_OWNER: ["OWNER_CONFIRMED"], // Owner can confirm the transferred cash
   DISPUTED: ["PAID_TO_CASHIER", "TRANSFERRED_TO_OWNER"],
   OWNER_CONFIRMED: [], // Terminal state
 };
@@ -398,18 +404,21 @@ export const updateOrderStatus = async (
   }
 
   if (user.role === "owner") {
-    // Owner cannot change TRANSFERRED_TO_OWNER status (terminal state)
-    if (order.status === "TRANSFERRED_TO_OWNER") {
+    // Owner can only change TRANSFERRED_TO_OWNER → OWNER_CONFIRMED
+    if (order.status !== "TRANSFERRED_TO_OWNER") {
       throw {
         status: 403,
-        message: "Orders with TRANSFERRED_TO_OWNER status cannot be changed",
+        message:
+          "Owner can only confirm orders that have been transferred (TRANSFERRED_TO_OWNER status)",
       };
     }
-    // Owner cannot perform other transitions
-    throw {
-      status: 403,
-      message: "Owner can only update orders in TRANSFERRED_TO_OWNER status",
-    };
+    if (status !== "OWNER_CONFIRMED") {
+      throw {
+        status: 403,
+        message:
+          "Owner can only change status from TRANSFERRED_TO_OWNER to OWNER_CONFIRMED",
+      };
+    }
   }
 
   // Set status, corresponding timestamp, and user tracking
@@ -560,18 +569,21 @@ export const bulkUpdateOrderStatus = async (
   }
 
   if (user.role === "owner") {
-    // Owner cannot change TRANSFERRED_TO_OWNER status (terminal state)
-    if (firstOrderStatus === "TRANSFERRED_TO_OWNER") {
+    // Owner can only change TRANSFERRED_TO_OWNER → OWNER_CONFIRMED
+    if (firstOrderStatus !== "TRANSFERRED_TO_OWNER") {
       throw {
         status: 403,
-        message: "Orders with TRANSFERRED_TO_OWNER status cannot be changed",
+        message:
+          "Owner can only confirm orders that have been transferred (TRANSFERRED_TO_OWNER status)",
       };
     }
-    // Owner cannot perform other transitions
-    throw {
-      status: 403,
-      message: "Owner can only update orders in TRANSFERRED_TO_OWNER status",
-    };
+    if (newStatus !== "OWNER_CONFIRMED") {
+      throw {
+        status: 403,
+        message:
+          "Owner can only change status from TRANSFERRED_TO_OWNER to OWNER_CONFIRMED",
+      };
+    }
   }
 
   // Update all orders
@@ -750,13 +762,16 @@ export const getOrdersByCashier = async (
   if (filters?.startDate || filters?.endDate) {
     query.createdAt = {};
     if (filters.startDate) {
-      query.createdAt.$gte = filters.startDate;
+      // Ensure startDate is at beginning of day
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      query.createdAt.$gte = start;
     }
     if (filters.endDate) {
-      // Set end date to end of day (23:59:59.999)
-      const endDate = new Date(filters.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      query.createdAt.$lte = endDate;
+      // Ensure endDate is at end of day (23:59:59.999)
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = end;
     }
   }
 

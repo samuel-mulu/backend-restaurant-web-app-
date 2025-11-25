@@ -20,16 +20,26 @@ export const create = async (req: Request, res: Response) => {
 
 export const list = async (req: Request, res: Response) => {
   try {
+    // Properly handle date range - set startDate to beginning of day and endDate to end of day
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (req.query.startDate) {
+      startDate = new Date(req.query.startDate as string);
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    if (req.query.endDate) {
+      endDate = new Date(req.query.endDate as string);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
     const filters = {
       status: req.query.status as any,
       waiterId: req.query.waiterId as string,
       cashierId: req.query.cashierId as string,
-      startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
-        : undefined,
-      endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
-        : undefined,
+      startDate,
+      endDate,
       search: req.query.search as string,
       tableNumber: req.query.tableNumber as string,
     };
@@ -197,10 +207,14 @@ export const getByCashier = async (req: Request, res: Response) => {
         filters.waiterId = waiterId;
       }
       if (startDate && typeof startDate === "string") {
-        filters.startDate = new Date(startDate);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        filters.startDate = start;
       }
       if (endDate && typeof endDate === "string") {
-        filters.endDate = new Date(endDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filters.endDate = end;
       }
     }
 
