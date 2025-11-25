@@ -4,6 +4,7 @@ import {
   requireAuth,
   requireRole,
 } from "../../common/middleware/authMiddleware";
+import { uploadImageMiddleware } from "../../common/middleware/upload";
 
 const router = Router();
 
@@ -72,10 +73,12 @@ router.patch(
 );
 
 // Update order status (Cashier/Owner can update)
+// Supports both JSON and FormData (for payment proof image upload)
 router.patch(
   "/:id/status",
   requireAuth,
   requireRole("cashier", "owner"),
+  uploadImageMiddleware.single("paymentProofImage"),
   orderCtrl.updateStatus
 );
 

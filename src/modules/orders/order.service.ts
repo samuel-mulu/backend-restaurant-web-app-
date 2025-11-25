@@ -8,6 +8,7 @@ import { User } from "../auth/user.model";
 import { formatReceipt } from "../../common/utils/receiptFormatter";
 import { printReceipt } from "../../common/utils/posPrinterClient";
 import { Inventory } from "../inventory/inventory.model";
+import { uploadImage, deleteImage } from "../../config/cloudinary";
 
 // Helper function to populate user tracking fields
 const populateUserTrackingFields = async (order: OrderDoc): Promise<void> => {
@@ -441,7 +442,9 @@ const validStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
 export const updateOrderStatus = async (
   id: string,
   status: OrderStatus,
-  userId: string
+  userId: string,
+  paymentMethod?: "cash" | "mobile_banking",
+  paymentProofImageFile?: Express.Multer.File
 ): Promise<OrderDoc | null> => {
   const order = await Order.findById(id);
 
@@ -541,11 +544,65 @@ export const updateOrderStatus = async (
   const now = new Date();
   const userIdObjectId = new Types.ObjectId(userId);
 
+  // Handle payment method and proof image for PAID_TO_CASHIER status
+  if (status === "PAID_TO_CASHIER") {
+    order.paymentReceivedAt = now;
+
+    // Set payment method (default to cash if not provided)
+    if (paymentMethod) {
+      order.paymentMethod = paymentMethod;
+    } else {
+      order.paymentMethod = "cash";
+    }
+
+    // Handle payment proof image upload for mobile banking
+    if (paymentMethod === "mobile_banking" && paymentProofImageFile) {
+      try {
+        // Delete old payment proof image if exists
+        if (order.paymentProofImage?.publicId) {
+          await deleteImage(order.paymentProofImage.publicId).catch((err) =>
+            console.error(
+              `Failed to delete old payment proof image: ${err.message}`
+            )
+          );
+        }
+
+        // Upload new payment proof image
+        const uploadResult = await uploadImage(
+          paymentProofImageFile.buffer,
+          "payment-proofs"
+        );
+        order.paymentProofImage = {
+          url: uploadResult.url,
+          publicId: uploadResult.public_id,
+        };
+      } catch (error: any) {
+        throw {
+          status: 500,
+          message: "Failed to upload payment proof image",
+          details: error.message,
+        };
+      }
+    } else if (paymentMethod === "mobile_banking" && !paymentProofImageFile) {
+      // Require payment proof image for mobile banking
+      throw {
+        status: 400,
+        message: "Payment proof image is required for mobile banking payments",
+      };
+    } else if (paymentMethod === "cash" && order.paymentProofImage) {
+      // Clear payment proof image for cash payments
+      if (order.paymentProofImage.publicId) {
+        await deleteImage(order.paymentProofImage.publicId).catch((err) =>
+          console.error(`Failed to delete payment proof image: ${err.message}`)
+        );
+      }
+      order.paymentProofImage = undefined;
+    }
+  }
+
   if (status === "VOIDED") {
     order.cancelledAt = now;
     order.cancelledBy = userIdObjectId as any;
-  } else if (status === "PAID_TO_CASHIER") {
-    order.paymentReceivedAt = now;
   } else if (status === "TRANSFERRED_TO_OWNER") {
     order.paymentDeliveredAt = now;
     order.transferredToOwnerBy = userIdObjectId as any;

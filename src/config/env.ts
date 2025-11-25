@@ -39,5 +39,5 @@ export const env = {
 
   // POS Printer Service
   posPrinterUrl: process.env.POS_PRINTER_URL || "http://localhost:7777",
-  posPrinterKey: process.env.POS_PRINTER_KEY as string | undefined,
+  posPrinterKey: process.env.POS_PRINTER_KEY || "pos-printer-secret-key-2024",
 };
