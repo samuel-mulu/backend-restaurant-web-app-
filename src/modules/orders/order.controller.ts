@@ -71,21 +71,40 @@ export const updateStatus = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const { status } = req.body;
+    // Handle both JSON and FormData requests
+    const status = req.body.status;
     if (!status) {
       return res.status(400).json({ error: "Status is required" });
     }
 
+    // Extract payment method (default to cash)
+    const paymentMethod = req.body.paymentMethod || "cash";
+
+    // Validate payment method
+    if (paymentMethod !== "cash" && paymentMethod !== "mobile_banking") {
+      return res.status(400).json({
+        error: "Payment method must be 'cash' or 'mobile_banking'",
+      });
+    }
+
+    // Get payment proof image file if provided (from multer)
+    const paymentProofImageFile = req.file;
+
     const order = await orderService.updateOrderStatus(
       req.params.id,
       status,
-      req.user._id
+      req.user._id,
+      paymentMethod,
+      paymentProofImageFile
     );
     res.json(order);
   } catch (error: any) {
     console.error("Error updating order status:", error);
     if (error.status) {
-      res.status(error.status).json({ error: error.message });
+      res.status(error.status).json({
+        error: error.message,
+        details: error.details,
+      });
       return;
     }
     res.status(500).json({ error: "Failed to update order status" });

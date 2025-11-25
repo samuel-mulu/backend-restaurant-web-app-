@@ -39,6 +39,9 @@ export interface OrderDoc extends Document {
   transferredToOwnerBy?: Schema.Types.ObjectId;
   confirmedBy?: Schema.Types.ObjectId;
   disputedBy?: Schema.Types.ObjectId;
+  // Payment information
+  paymentMethod?: "cash" | "mobile_banking";
+  paymentProofImage?: { url: string; publicId: string };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +84,16 @@ const orderSchema = new Schema<OrderDoc>(
     transferredToOwnerBy: { type: Schema.Types.ObjectId, ref: "User" },
     confirmedBy: { type: Schema.Types.ObjectId, ref: "User" },
     disputedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    // Payment information
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "mobile_banking"],
+      default: undefined,
+    },
+    paymentProofImage: {
+      url: { type: String },
+      publicId: { type: String },
+    },
     waiterId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     cashierId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     offlineId: String,

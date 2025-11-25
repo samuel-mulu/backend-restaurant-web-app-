@@ -13,15 +13,7 @@ export interface PrintResult {
  * @returns Promise that resolves with print result
  */
 export async function printReceipt(receiptData: string): Promise<PrintResult> {
-  // Check if POS printer is configured
-  if (!env.posPrinterKey) {
-    return {
-      success: false,
-      message: "POS Printer Service not configured",
-      error: "PRINT_KEY environment variable is not set",
-    };
-  }
-
+  // Always use localhost - POS service runs on same PC as backend
   const printUrl = `${env.posPrinterUrl}/print`;
 
   try {
@@ -33,7 +25,7 @@ export async function printReceipt(receiptData: string): Promise<PrintResult> {
       {
         headers: {
           "Content-Type": "application/json",
-          "X-Print-Key": env.posPrinterKey,
+          "X-Print-Key": env.posPrinterKey || "dev-key-12345",
         },
         timeout: 5000, // 5 second timeout (reduced for faster response)
       }
