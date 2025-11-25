@@ -13,7 +13,6 @@ export interface CreateInventoryInput {
   quantity: number;
   unit: string;
   price: number;
-  minThreshold?: number;
 }
 
 export interface UpdateInventoryInput {
@@ -22,7 +21,6 @@ export interface UpdateInventoryInput {
   categoryId?: string;
   quantity?: number;
   price?: number;
-  minThreshold?: number;
 }
 
 /* ---------------------- COMMON UTILS ---------------------- */
@@ -44,11 +42,9 @@ export const listInventory = async (filters: ListInventoryFilters = {}) => {
     query.categoryId = new Types.ObjectId(filters.categoryId);
   }
 
-  // Low stock filter
+  // Low stock filter (quantity <= 0)
   if (filters.lowStock) {
-    query.$expr = {
-      $lte: ["$quantity", { $ifNull: ["$minThreshold", 0] }],
-    };
+    query.quantity = { $lte: 0 };
   }
 
   return Inventory.find(query)
@@ -75,7 +71,7 @@ export const createInventory = async (
 ): Promise<InventoryDoc> => {
   if (data.quantity < 0)
     throw { status: 400, message: "Quantity cannot be negative" };
-  
+
   if (data.price < 0)
     throw { status: 400, message: "Price cannot be negative" };
 
@@ -88,7 +84,6 @@ export const createInventory = async (
     quantity: data.quantity,
     unit: data.unit,
     price: data.price,
-    minThreshold: data.minThreshold ?? 0,
   });
 
   await inventory.populate("categoryId", "name type");
@@ -128,12 +123,6 @@ export const updateInventory = async (
     inventory.price = data.price;
   }
 
-  if (data.minThreshold !== undefined) {
-    if (data.minThreshold < 0)
-      throw { status: 400, message: "Min threshold cannot be negative" };
-    inventory.minThreshold = data.minThreshold;
-  }
-
   await inventory.save();
   await inventory.populate("categoryId", "name type");
 
@@ -144,7 +133,7 @@ export const updateInventory = async (
 
 export const getLowStockItems = async () => {
   return Inventory.find({
-    $expr: { $lte: ["$quantity", { $ifNull: ["$minThreshold", 0] }] },
+    quantity: { $lte: 0 },
   })
     .populate("categoryId", "name type")
     .sort({ quantity: 1 })

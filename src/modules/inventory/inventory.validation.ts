@@ -16,7 +16,6 @@ export const createInventorySchema = Joi.object({
   quantity: Joi.number().min(0).required(),
   unit: Joi.string().trim().required(),
   price: Joi.number().min(0).required(),
-  minThreshold: Joi.number().min(0).optional(),
 });
 
 export const updateInventorySchema = Joi.object({
@@ -33,5 +32,4 @@ export const updateInventorySchema = Joi.object({
     .allow(null, ""),
   quantity: Joi.number().min(0).optional(),
   price: Joi.number().min(0).optional(),
-  minThreshold: Joi.number().min(0).optional(),
 });

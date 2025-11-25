@@ -8,7 +8,6 @@ export interface InventoryDoc extends Document {
   quantity: number;
   unit: string;
   price: number;
-  minThreshold?: number;
   clientId?: string;
 
   /** Virtuals */
@@ -56,12 +55,6 @@ const InventorySchema = new Schema<InventoryDoc>(
       min: 0,
     },
 
-    minThreshold: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
     clientId: {
       type: String,
       sparse: true,
@@ -85,19 +78,18 @@ InventorySchema.virtual("id").get(function () {
 });
 
 /**
- * Returns true if quantity <= minThreshold
+ * Returns true if quantity is 0 or less
  */
 InventorySchema.virtual("isLowStock").get(function () {
-  return this.quantity <= (this.minThreshold ?? 0);
+  return this.quantity <= 0;
 });
 
 /**
  * Returns a human-friendly stock status
- * low / normal / overstock
+ * low / normal
  */
 InventorySchema.virtual("stockStatus").get(function () {
-  const threshold = this.minThreshold ?? 0;
-  if (this.quantity <= threshold) return "low";
+  if (this.quantity <= 0) return "low";
   return "normal";
 });
 
