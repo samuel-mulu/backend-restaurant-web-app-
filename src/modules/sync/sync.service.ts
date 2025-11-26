@@ -114,7 +114,47 @@ async function syncOrder(
   );
 
   if (existing) {
-    // Idempotency: return existing order
+    // If method is update, merge the update data with existing order
+    if (op.method === "update") {
+      // Only update fields that are provided in op.data
+      if (op.data.status !== undefined) {
+        existing.status = op.data.status;
+      }
+      if (op.data.items !== undefined) {
+        existing.items = op.data.items.map((item: any) => ({
+          itemId: item.itemId,
+          nameSnapshot: item.nameSnapshot,
+          priceSnapshot: item.priceSnapshot,
+          qty: item.qty,
+        }));
+      }
+      if (op.data.totalAmount !== undefined) {
+        existing.totalAmount = op.data.totalAmount;
+      }
+      if (op.data.tableNumber !== undefined) {
+        existing.tableNumber = op.data.tableNumber;
+      }
+      if (op.data.note !== undefined || op.data.notes !== undefined) {
+        existing.note = op.data.note || op.data.notes;
+      }
+      if (op.data.paymentMethod !== undefined) {
+        existing.paymentMethod = op.data.paymentMethod;
+      }
+      if (op.data.paymentProofImage !== undefined) {
+        existing.paymentProofImage = op.data.paymentProofImage;
+      }
+
+      await existing.save({ session });
+
+      result.synced.push({
+        clientId: op.clientId,
+        serverId: existing._id.toString(),
+        type: "order",
+      });
+      return;
+    }
+
+    // For create method: idempotency - return existing order
     result.synced.push({
       clientId: op.clientId,
       serverId: existing._id.toString(),
@@ -123,17 +163,25 @@ async function syncOrder(
     return;
   }
 
-  // Create new order
-  const order = await Order.create(
-    [
-      {
-        ...op.data,
-        clientId: op.clientId,
-        cashierId: performedBy,
-      },
-    ],
-    { session }
-  );
+  // Create new order - ensure all required fields are present
+  const orderData: any = {
+    ...op.data,
+    clientId: op.clientId,
+    cashierId: performedBy,
+  };
+
+  // Validate required fields
+  if (!orderData.orderNumber) {
+    throw new Error("Order validation failed: orderNumber is required");
+  }
+  if (orderData.totalAmount === undefined || orderData.totalAmount === null) {
+    throw new Error("Order validation failed: totalAmount is required");
+  }
+  if (!orderData.placedAt) {
+    orderData.placedAt = new Date();
+  }
+
+  const order = await Order.create([orderData], { session });
 
   result.synced.push({
     clientId: op.clientId,
