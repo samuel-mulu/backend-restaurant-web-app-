@@ -241,9 +241,14 @@ export const getAllOrders = async (_req: Request, res: Response) => {
 // Accept order (owner can also accept orders)
 export const acceptOrder = async (req: Request, res: Response) => {
   try {
+    const userId = req.user?.id || req.user?._id || "";
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
     const order = await orderService.updateOrderStatus(
       req.params.id,
-      "accepted"
+      "OWNER_CONFIRMED",
+      userId
     );
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
@@ -258,9 +263,14 @@ export const acceptOrder = async (req: Request, res: Response) => {
 // Reject order (owner can also reject orders)
 export const rejectOrder = async (req: Request, res: Response) => {
   try {
+    const userId = req.user?.id || req.user?._id || "";
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
     const order = await orderService.updateOrderStatus(
       req.params.id,
-      "rejected"
+      "VOIDED",
+      userId
     );
     if (!order) {
       return res.status(404).json({ error: "Order not found" });

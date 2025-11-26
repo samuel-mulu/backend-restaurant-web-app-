@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: restaurant-menu-backend
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Note: PORT is automatically set by Render, no need to configure it
+      # Database - Set this in Render dashboard
+      - key: MONGO_URI
+        sync: false
+      # JWT Configuration - Set these in Render dashboard
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_ACCESS_EXPIRES
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES
+        value: 30d
+      # CORS and Cookies - Update with your frontend URL
+      - key: CORS_ORIGIN
+        sync: false
+      - key: COOKIE_DOMAIN
+        sync: false
+      - key: SECURE_COOKIES
+        value: true
+      # Cloudinary (Optional) - Set in Render dashboard if using
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      # Email Configuration (Optional) - Set in Render dashboard if using
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_SECURE
+        value: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_NAME
+        value: Menu App
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      # POS Printer Service (Optional) - Set in Render dashboard if needed
+      - key: POS_PRINTER_URL
+        sync: false
+      - key: POS_PRINTER_KEY
+        sync: false

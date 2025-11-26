@@ -328,16 +328,13 @@ const handleInventoryUpdate = async (_io: Server, change: any) => {
         return;
       }
 
-      // Check if quantity is below threshold
-      if (
-        inventory.minThreshold &&
-        inventory.quantity < inventory.minThreshold
-      ) {
+      // Check if quantity is low (0 or less)
+      if (inventory.quantity <= 0) {
         notifyInventoryLowStock({
           inventoryId: inventory._id.toString(),
           inventoryName: inventory.name,
           quantity: inventory.quantity,
-          minThreshold: inventory.minThreshold,
+          minThreshold: 0,
         });
       }
     } catch (error) {

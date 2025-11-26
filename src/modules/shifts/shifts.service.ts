@@ -34,7 +34,7 @@ export const startShift = async (data: CreateShiftInput): Promise<ShiftDoc> => {
     throw { status: 400, message: "User is not a cashier or waiter" };
   }
 
-  if (staff.status !== "active") {
+  if (staff.isDeleted) {
     throw { status: 400, message: "Staff member is not active" };
   }
 

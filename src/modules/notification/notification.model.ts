@@ -1,7 +1,7 @@
-import { Schema, model, Document } from "mongoose";
+import { Schema, model, Document, Types } from "mongoose";
 
 export interface NotificationDoc extends Document {
-  _id: string;
+  _id: Types.ObjectId;
   id: string;
   userId: string;
   title: string;

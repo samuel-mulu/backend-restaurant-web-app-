@@ -50,7 +50,7 @@ export function formatReceipt(order: OrderDoc): string {
   lines.push(separator("-"));
   
   order.items.forEach((item) => {
-    const itemName = item.nameSnapshot || (typeof item.itemId === "object" && item.itemId?.name) || "Unknown Item";
+    const itemName = item.nameSnapshot || (typeof item.itemId === "object" && (item.itemId as any)?.name) || "Unknown Item";
     const quantity = item.qty;
     const price = item.priceSnapshot;
     const subtotal = quantity * price;

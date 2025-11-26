@@ -8,6 +8,7 @@ export const ROLE_RANK: Record<Role, number> = {
   owner: 3,
   cashier: 2,
   waiter: 1,
+  staff: 1,
 };
 
 // Extend Express Request interface to include user
@@ -95,7 +96,7 @@ export async function requireAuth(
       id: String(user._id),
       name: user.name,
       email: user.email,
-      phone: user.phone,
+      phone: user.phone || "",
       role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

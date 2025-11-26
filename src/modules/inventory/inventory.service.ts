@@ -108,7 +108,7 @@ export const updateInventory = async (
 
   if (data.categoryId !== undefined) {
     validateObjectId(data.categoryId, "Invalid category ID");
-    inventory.categoryId = data.categoryId || undefined;
+    inventory.categoryId = data.categoryId ? new Types.ObjectId(data.categoryId) : undefined;
   }
 
   if (data.quantity !== undefined) {
