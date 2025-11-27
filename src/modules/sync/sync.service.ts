@@ -90,9 +90,15 @@ export const processSync = async (
       }
     }
 
-    await session.commitTransaction();
+    // Only commit if transaction is still active
+    if (session.inTransaction()) {
+      await session.commitTransaction();
+    }
   } catch (error) {
-    await session.abortTransaction();
+    // Only abort if transaction is still active
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     throw error;
   } finally {
     session.endSession();
