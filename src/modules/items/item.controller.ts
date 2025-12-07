@@ -52,10 +52,40 @@ const sendError = (res: Response, err: any) => {
 
 /* ------------------------------- Controllers -------------------------------- */
 
+/**
+ * Parse FormData body fields to proper types
+ */
+const parseFormDataBody = (body: any) => {
+  const parsed: any = { ...body };
+
+  // Parse price (can be string from FormData)
+  if (parsed.price !== undefined) {
+    parsed.price =
+      typeof parsed.price === "string"
+        ? parseFloat(parsed.price)
+        : Number(parsed.price);
+    if (isNaN(parsed.price)) {
+      throw new ItemServiceError(400, "Invalid price value", "INVALID_PRICE");
+    }
+  }
+
+  // Parse isAvailable (can be string from FormData)
+  if (parsed.isAvailable !== undefined) {
+    if (typeof parsed.isAvailable === "string") {
+      parsed.isAvailable = parsed.isAvailable === "true";
+    } else {
+      parsed.isAvailable = Boolean(parsed.isAvailable);
+    }
+  }
+
+  return parsed;
+};
+
 export const create = async (req: RequestWithFile, res: Response) => {
   try {
     const file = req.file ? [req.file] : undefined;
-    const item = await itemService.createItem(req.body, file);
+    const parsedBody = parseFormDataBody(req.body);
+    const item = await itemService.createItem(parsedBody, file);
 
     return sendSuccess(res, item, "Item created successfully", 201);
   } catch (err) {
@@ -94,8 +124,9 @@ export const get = async (req: Request, res: Response) => {
 export const update = async (req: RequestWithFile, res: Response) => {
   try {
     const file = req.file ? [req.file] : undefined;
+    const parsedBody = parseFormDataBody(req.body);
 
-    const item = await itemService.updateItem(req.params.id, req.body, file);
+    const item = await itemService.updateItem(req.params.id, parsedBody, file);
     if (!item) {
       return sendError(res, new ItemServiceError(404, "Item not found"));
     }

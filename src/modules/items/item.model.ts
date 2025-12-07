@@ -45,8 +45,6 @@ const ItemSchema = new Schema<ItemDoc>(
       type: Number,
       required: true,
       min: 0,
-      get: (v: number): number => v / 100,
-      set: (v: number): number => Math.round(v * 100),
     },
 
     image: {

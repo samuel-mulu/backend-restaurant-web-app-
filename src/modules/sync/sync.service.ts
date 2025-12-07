@@ -349,27 +349,67 @@ async function syncItem(
   result: SyncResult,
   session: mongoose.ClientSession
 ) {
-  const existing = await Item.findOne({ clientId: op.clientId }).session(
-    session
-  );
+  if (op.method === "create") {
+    const existing = await Item.findOne({ clientId: op.clientId }).session(
+      session
+    );
 
-  if (existing) {
+    if (existing) {
+      result.synced.push({
+        clientId: op.clientId,
+        serverId: existing._id.toString(),
+        type: "item",
+      });
+      return;
+    }
+
+    const item = await Item.create([{ ...op.data, clientId: op.clientId }], {
+      session,
+    });
     result.synced.push({
       clientId: op.clientId,
-      serverId: existing._id.toString(),
+      serverId: item[0]._id.toString(),
       type: "item",
     });
-    return;
-  }
+  } else if (op.method === "update") {
+    const item = await Item.findOneAndUpdate(
+      { clientId: op.clientId },
+      { ...op.data },
+      { new: true, session }
+    );
 
-  const item = await Item.create([{ ...op.data, clientId: op.clientId }], {
-    session,
-  });
-  result.synced.push({
-    clientId: op.clientId,
-    serverId: item[0]._id.toString(),
-    type: "item",
-  });
+    if (item) {
+      result.synced.push({
+        clientId: op.clientId,
+        serverId: item._id.toString(),
+        type: "item",
+      });
+    } else {
+      result.errors.push({
+        clientId: op.clientId,
+        error: "Item not found",
+      });
+    }
+  } else if (op.method === "delete") {
+    const item = await Item.findOneAndUpdate(
+      { clientId: op.clientId },
+      { isDeleted: true, deletedAt: new Date(), isAvailable: false },
+      { new: true, session }
+    );
+
+    if (item) {
+      result.synced.push({
+        clientId: op.clientId,
+        serverId: item._id.toString(),
+        type: "item",
+      });
+    } else {
+      result.errors.push({
+        clientId: op.clientId,
+        error: "Item not found",
+      });
+    }
+  }
 }
 
 async function syncCategory(

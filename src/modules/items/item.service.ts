@@ -128,6 +128,18 @@ export const createItem = async (
     }
   }
 
+  // Ensure price is a number (accept as-is, no conversion)
+  if (data.price !== undefined) {
+    const priceNum =
+      typeof data.price === "string"
+        ? parseFloat(data.price)
+        : Number(data.price);
+    if (isNaN(priceNum) || priceNum < 0) {
+      throw new ItemServiceError(400, "Invalid price value", "INVALID_PRICE");
+    }
+    data.price = priceNum;
+  }
+
   // Handle image
   let uploadedImage: ImageInfo | null = null;
 
@@ -297,6 +309,19 @@ export const updateItem = async (
 
     if (data.categoryId) {
       updateData.categoryId = new Types.ObjectId(data.categoryId);
+    }
+
+    // Ensure price is a number (accept as-is, no conversion)
+    if (data.price !== undefined) {
+      const priceNum =
+        typeof data.price === "string"
+          ? parseFloat(data.price)
+          : Number(data.price);
+      if (isNaN(priceNum) || priceNum < 0) {
+        throw new ItemServiceError(400, "Invalid price value", "INVALID_PRICE");
+      }
+      // Store price as-is without any conversion
+      updateData.price = priceNum;
     }
 
     const updated = await Item.findOneAndUpdate(
