@@ -3,13 +3,11 @@ import { Inventory, InventoryDoc } from "./inventory.model";
 
 export interface ListInventoryFilters {
   lowStock?: boolean;
-  categoryId?: string;
 }
 
 export interface CreateInventoryInput {
   name: string;
   description?: string;
-  categoryId?: string;
   quantity: number;
   unit: string;
   price: number;
@@ -18,8 +16,8 @@ export interface CreateInventoryInput {
 export interface UpdateInventoryInput {
   name?: string;
   description?: string;
-  categoryId?: string;
   quantity?: number;
+  unit?: string;
   price?: number;
 }
 
@@ -36,19 +34,12 @@ const validateObjectId = (id: string, message = "Invalid ID") => {
 export const listInventory = async (filters: ListInventoryFilters = {}) => {
   const query: any = {};
 
-  // Optional category filter
-  if (filters.categoryId) {
-    validateObjectId(filters.categoryId, "Invalid category ID");
-    query.categoryId = new Types.ObjectId(filters.categoryId);
-  }
-
   // Low stock filter (quantity <= 0)
   if (filters.lowStock) {
     query.quantity = { $lte: 0 };
   }
 
   return Inventory.find(query)
-    .populate("categoryId", "name type")
     .sort(filters.lowStock ? { quantity: 1 } : { createdAt: -1 })
     .lean();
 };
@@ -61,7 +52,7 @@ export const getInventoryById = async (
   validateObjectId(id, "Invalid inventory ID");
 
   // Return document so virtuals work
-  return Inventory.findById(id).populate("categoryId", "name type");
+  return Inventory.findById(id);
 };
 
 /* ---------------------- CREATE ---------------------- */
@@ -75,18 +66,13 @@ export const createInventory = async (
   if (data.price < 0)
     throw { status: 400, message: "Price cannot be negative" };
 
-  validateObjectId(data.categoryId || "", "Invalid category ID");
-
   const inventory = await Inventory.create({
     name: data.name.trim(),
     description: data.description?.trim(),
-    categoryId: data.categoryId || undefined,
     quantity: data.quantity,
     unit: data.unit,
     price: data.price,
   });
-
-  await inventory.populate("categoryId", "name type");
 
   return inventory;
 };
@@ -106,15 +92,14 @@ export const updateInventory = async (
   if (data.description !== undefined)
     inventory.description = data.description?.trim();
 
-  if (data.categoryId !== undefined) {
-    validateObjectId(data.categoryId, "Invalid category ID");
-    inventory.categoryId = data.categoryId ? new Types.ObjectId(data.categoryId) : undefined;
-  }
-
   if (data.quantity !== undefined) {
     if (data.quantity < 0)
       throw { status: 400, message: "Quantity cannot be negative" };
     inventory.quantity = data.quantity;
+  }
+
+  if (data.unit !== undefined) {
+    inventory.unit = data.unit.trim();
   }
 
   if (data.price !== undefined) {
@@ -124,7 +109,6 @@ export const updateInventory = async (
   }
 
   await inventory.save();
-  await inventory.populate("categoryId", "name type");
 
   return inventory;
 };
@@ -135,7 +119,6 @@ export const getLowStockItems = async () => {
   return Inventory.find({
     quantity: { $lte: 0 },
   })
-    .populate("categoryId", "name type")
     .sort({ quantity: 1 })
     .lean();
 };

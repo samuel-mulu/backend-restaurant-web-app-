@@ -4,7 +4,6 @@ export interface InventoryDoc extends Document {
   _id: Types.ObjectId;
   name: string;
   description?: string;
-  categoryId?: Types.ObjectId;
   quantity: number;
   unit: string;
   price: number;
@@ -28,12 +27,6 @@ const InventorySchema = new Schema<InventoryDoc>(
     description: {
       type: String,
       trim: true,
-    },
-
-    categoryId: {
-      type: Schema.Types.ObjectId,
-      ref: "Category",
-      index: true,
     },
 
     quantity: {
@@ -94,8 +87,6 @@ InventorySchema.virtual("stockStatus").get(function () {
 });
 
 /* ---------------------- INDEXES ---------------------- */
-// Compound index for faster filtering by client + category
-InventorySchema.index({ clientId: 1, categoryId: 1 });
 
 /* ---------------------- EXPORT MODEL ---------------------- */
 export const Inventory = model<InventoryDoc>("Inventory", InventorySchema);

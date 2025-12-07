@@ -14,7 +14,6 @@ export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = {
       lowStock: req.query.lowStock === "true",
-      categoryId: req.query.categoryId as string | undefined,
     };
 
     const items = await inventoryService.listInventory(filters);
