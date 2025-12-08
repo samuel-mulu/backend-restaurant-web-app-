@@ -1,6 +1,6 @@
 # Restaurant Management System Backend
 
-A comprehensive, production-ready backend system for restaurant management built with Express.js, TypeScript, and MongoDB. This system supports multi-role access control (Owner, Cashier, Waiter), real-time order management, inventory tracking, staff management, salary processing, and comprehensive analytics.
+A comprehensive, production-ready backend system for restaurant management built with Express.js, TypeScript, and MongoDB. This system supports multi-role access control (Owner, Cashier, Waiter), real-time order management, inventory tracking, staff management, salary processing, receipt printing, and comprehensive analytics.
 
 ## 📋 Table of Contents
 
@@ -15,6 +15,7 @@ A comprehensive, production-ready backend system for restaurant management built
 - [Authentication & Authorization](#authentication--authorization)
 - [Modules Overview](#modules-overview)
 - [Real-time Features](#real-time-features)
+- [Printer Integration](#printer-integration)
 - [Database Schema](#database-schema)
 - [Security Features](#security-features)
 - [Development](#development)
@@ -34,6 +35,7 @@ A comprehensive, production-ready backend system for restaurant management built
 - **Inventory Tracking**: Real-time stock monitoring with low-stock alerts and purchase history
 - **Statistics & Analytics**: Dashboard with sales analytics, product performance, staff metrics, and inventory insights
 - **Real-time Updates**: Socket.io integration for live order updates, notifications, and inventory alerts
+- **Receipt Printing**: Automatic receipt printing via POS Printer Service with USB and Bluetooth thermal printer support
 - **Audit Logging**: Complete audit trail for critical operations
 - **File Uploads**: Cloudinary integration for image management
 - **Offline Support**: Client-side synchronization with offline order creation
@@ -225,6 +227,10 @@ SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM_NAME=Restaurant App
 SMTP_FROM_EMAIL=your-email@gmail.com
+
+# POS Printer Service (Optional - for receipt printing)
+POS_PRINTER_URL=http://localhost:7777
+POS_PRINTER_KEY=your-secret-key-here
 ```
 
 ### MongoDB Setup
@@ -581,6 +587,232 @@ The application uses MongoDB change streams to automatically detect database cha
 
 - Order collection changes → Real-time order notifications
 - Inventory collection changes → Low stock alerts
+
+## 🖨 Printer Integration {#printer-integration}
+
+### Overview
+
+The system includes integrated receipt printing functionality through a dedicated POS Printer Service. When orders are created, receipts are automatically formatted and sent to thermal printers connected to cashier PCs.
+
+### Architecture
+
+The printer system uses a distributed architecture:
+
+1. **Backend Server**: Formats receipts and sends print requests
+2. **POS Printer Service**: Runs locally on each cashier PC, receives print requests and communicates with physical printers
+3. **Physical Printers**: USB or Bluetooth thermal printers connected to cashier PCs
+
+### POS Printer Service
+
+A lightweight Node.js service that runs on each cashier PC and handles direct communication with thermal printers.
+
+#### Features
+
+- **Multiple Printer Support**: USB printers and Bluetooth thermal printers (via serial COM ports)
+- **Automatic Receipt Formatting**: Receipts are formatted for 58mm thermal printers (32 characters per line)
+- **Secure API**: Authentication via secret key to prevent unauthorized print jobs
+- **Retry Mechanism**: Automatic retry on failed print jobs (configurable attempts and delay)
+- **Print Queue**: Sequential processing to prevent printer conflicts
+- **Health Monitoring**: Health check endpoints for service and printer status
+
+#### Installation
+
+1. **Navigate to POS Printer Service directory**:
+
+   ```bash
+   cd POS\ Printer\ Service
+   ```
+
+2. **Install dependencies**:
+
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables**:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+4. **Edit `.env` file**:
+
+   ```env
+   PORT=7777
+   PRINTER_INTERFACE=usb  # or "serial" for Bluetooth
+   PRINTER_USB_NAME=Your-Printer-Name  # Required for USB
+   PRINTER_SERIAL_PORT=COM3  # Required for serial/Bluetooth
+   PRINT_KEY=your-secret-key-here
+   MAX_RETRIES=3
+   RETRY_DELAY_MS=1000
+   ```
+
+5. **Build and start service**:
+   ```bash
+   npm run build
+   npm run pm2:start
+   npm run pm2:save
+   npm run pm2:startup
+   ```
+
+#### Finding Printer Information
+
+**USB Printers (Windows)**:
+
+```bash
+wmic printer list brief
+```
+
+**Serial/Bluetooth Printers**:
+
+1. Open Device Manager (Win + X → Device Manager)
+2. Expand "Ports (COM & LPT)"
+3. Note the COM port (e.g., COM3)
+
+### Backend Configuration
+
+Add the following to your backend `.env` file:
+
+```env
+# POS Printer Service Configuration
+POS_PRINTER_URL=http://localhost:7777
+POS_PRINTER_KEY=your-secret-key-here
+```
+
+**Note**: For production with multiple cashier PCs, you may need to configure printer URLs per cashier or use a load balancer.
+
+### Receipt Formatting
+
+Receipts are automatically formatted when orders are created. The receipt includes:
+
+- Restaurant name and header
+- Order number and date
+- Table number (if applicable)
+- Itemized list with quantities and prices
+- Notes (if any)
+- Total amount
+- Order status
+- Waiter and cashier information
+- Footer message
+
+Receipt format is optimized for 58mm thermal printers (32 characters per line width).
+
+### Automatic Printing
+
+When an order is created via the API:
+
+1. Order is saved to database
+2. Receipt is formatted using `receiptFormatter.ts`
+3. Print request is sent to POS Printer Service
+4. Service queues and processes the print job
+5. Receipt is printed on thermal printer
+
+**Note**: Order processing continues even if the printer service is unavailable. Print failures are logged but don't block order creation.
+
+### Printer Management UI
+
+The frontend includes a printer management page (`/printer`) that allows:
+
+- Viewing printer service health status
+- Testing printer connection
+- Configuring printer settings (USB/Serial)
+- Viewing available USB printers and COM ports
+- Performing test prints
+- Updating printer configuration
+
+### API Integration
+
+#### Print Receipt Function
+
+```typescript
+import { printReceipt } from "./common/utils/posPrinterClient";
+
+// Automatically called when order is created
+const result = await printReceipt(formattedReceiptText);
+
+if (result.success) {
+  console.log("Receipt printed successfully");
+} else {
+  console.error("Print failed:", result.error);
+}
+```
+
+#### POS Printer Service API
+
+**Print Endpoint**:
+
+```
+POST http://localhost:7777/print
+Headers:
+  X-Print-Key: your-secret-key-here
+  Content-Type: application/json
+Body:
+  {
+    "data": "formatted receipt text"
+  }
+```
+
+**Health Check**:
+
+```
+GET http://localhost:7777/health
+```
+
+**Configuration**:
+
+```
+GET http://localhost:7777/config
+POST http://localhost:7777/config
+```
+
+### Troubleshooting
+
+#### Printer Not Connecting
+
+1. **USB Printer**:
+
+   - Verify printer name matches exactly (case-sensitive)
+   - Check printer is powered on and connected
+   - Try disconnecting and reconnecting USB cable
+   - Verify printer name: `wmic printer list brief`
+
+2. **Serial/Bluetooth Printer**:
+   - Verify COM port in Device Manager
+   - Check if another application is using the COM port
+   - Restart printer and Bluetooth connection
+   - Verify Bluetooth pairing is active
+
+#### Print Jobs Failing
+
+- Check POS Printer Service logs: `npm run pm2:logs` (in POS Printer Service directory)
+- Verify service is running: `GET http://localhost:7777/health`
+- Check `.env` configuration matches printer settings
+- Ensure printer has paper and is not jammed
+- Verify `POS_PRINTER_URL` and `POS_PRINTER_KEY` in backend `.env`
+
+#### Service Won't Start
+
+- Verify all environment variables in POS Printer Service `.env`
+- Check if port 7777 is already in use
+- Review error logs: `npm run pm2:logs`
+- Ensure TypeScript build completed: `npm run build`
+
+### Security Considerations
+
+- **Secret Key**: Use a strong, random `PRINT_KEY` in production
+- **Network Access**: POS Printer Service should only be accessible on local network
+- **HTTPS**: Consider using HTTPS for production deployments
+- **Firewall**: Configure firewall rules to restrict access to port 7777
+
+### Development Mode
+
+In development, the POS Printer Service can use a "mock" printer adapter that logs receipt content to the console instead of printing:
+
+```env
+PRINTER_INTERFACE=mock
+```
+
+This is useful for testing without a physical printer connected.
 
 ## 🗄 Database Schema {#database-schema}
 
