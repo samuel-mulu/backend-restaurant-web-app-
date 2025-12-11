@@ -16,5 +16,6 @@ router.get("/sales", statisticsCtrl.getSales);
 router.get("/products", statisticsCtrl.getProducts);
 router.get("/staff", statisticsCtrl.getStaff);
 router.get("/inventory", statisticsCtrl.getInventory);
+router.get("/comprehensive", statisticsCtrl.getComprehensive);
 
 export default router;

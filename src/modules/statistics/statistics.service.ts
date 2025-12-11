@@ -1,6 +1,7 @@
 import { Order } from "../orders/order.model";
 import { User } from "../auth/user.model";
 import { Inventory } from "../inventory/inventory.model";
+import { Item } from "../items/item.model";
 import { Types } from "mongoose";
 
 export interface DateRange {
@@ -39,7 +40,7 @@ export const getDashboardStats = async (
       {
         $match: {
           createdAt: { $gte: today },
-          status: "paid",
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
         },
       },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
@@ -48,7 +49,7 @@ export const getDashboardStats = async (
       {
         $match: {
           createdAt: { $gte: weekAgo },
-          status: "paid",
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
         },
       },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
@@ -57,7 +58,7 @@ export const getDashboardStats = async (
       {
         $match: {
           createdAt: { $gte: monthAgo },
-          status: "paid",
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
         },
       },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
@@ -113,13 +114,27 @@ export interface SalesAnalytics {
     count: number;
   }>;
   trends: Array<{ date: string; total: number }>;
+  revenueTrend: Array<{ date: string; total: number; count: number }>;
+  paymentMethodBreakdown: Array<{
+    method: string;
+    total: number;
+    count: number;
+  }>;
+  revenueComparison: {
+    today: number;
+    yesterday: number;
+    thisWeek: number;
+    lastWeek: number;
+    thisMonth: number;
+    lastMonth: number;
+  };
 }
 
 export const getSalesAnalytics = async (
   filters: SalesAnalyticsFilters = {}
 ): Promise<SalesAnalytics> => {
   const matchQuery: any = {
-    status: "paid",
+    status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
   };
 
   if (filters.startDate || filters.endDate) {
@@ -207,10 +222,123 @@ export const getSalesAnalytics = async (
     },
   ]);
 
+  // Payment method breakdown
+  const paymentMethodBreakdown = await Order.aggregate([
+    { $match: { ...matchQuery, paymentMethod: { $exists: true } } },
+    {
+      $group: {
+        _id: "$paymentMethod",
+        total: { $sum: "$totalAmount" },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        method: "$_id",
+        total: 1,
+        count: 1,
+        _id: 0,
+      },
+    },
+  ]);
+
+  // Revenue comparison
+  const now = new Date();
+  const today = new Date(now.setHours(0, 0, 0, 0));
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const thisWeekStart = new Date(today);
+  thisWeekStart.setDate(today.getDate() - today.getDay());
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const lastWeekEnd = new Date(thisWeekStart);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastMonthStart = new Date(
+    today.getFullYear(),
+    today.getMonth() - 1,
+    1
+  );
+  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+  const [
+    todayRevenue,
+    yesterdayRevenue,
+    thisWeekRevenue,
+    lastWeekRevenue,
+    thisMonthRevenue,
+    lastMonthRevenue,
+  ] = await Promise.all([
+    Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: today },
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: yesterday, $lt: today },
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: thisWeekStart },
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd },
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: thisMonthStart },
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: lastMonthStart, $lte: lastMonthEnd },
+          status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+  ]);
+
   return {
     salesByDay,
     salesByCashier,
     trends,
+    revenueTrend: salesByDay,
+    paymentMethodBreakdown,
+    revenueComparison: {
+      today: todayRevenue[0]?.total || 0,
+      yesterday: yesterdayRevenue[0]?.total || 0,
+      thisWeek: thisWeekRevenue[0]?.total || 0,
+      lastWeek: lastWeekRevenue[0]?.total || 0,
+      thisMonth: thisMonthRevenue[0]?.total || 0,
+      lastMonth: lastMonthRevenue[0]?.total || 0,
+    },
   };
 };
 
@@ -239,13 +367,19 @@ export interface ProductAnalytics {
     qty: number;
     revenue: number;
   }>;
+  revenueByCategory: Array<{
+    categoryId: string;
+    categoryName: string;
+    revenue: number;
+    itemCount: number;
+  }>;
 }
 
 export const getProductAnalytics = async (
   filters: ProductAnalyticsFilters = {}
 ): Promise<ProductAnalytics> => {
   const matchQuery: any = {
-    status: "paid",
+    status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
   };
 
   if (filters.startDate || filters.endDate) {
@@ -278,7 +412,7 @@ export const getProductAnalytics = async (
     { $limit: limit },
     {
       $project: {
-        itemId: "$_id",
+        itemId: { $toString: "$_id" },
         itemName: 1,
         totalQty: 1,
         revenue: 1,
@@ -304,7 +438,7 @@ export const getProductAnalytics = async (
     { $limit: limit },
     {
       $project: {
-        itemId: "$_id",
+        itemId: { $toString: "$_id" },
         itemName: 1,
         revenue: 1,
         _id: 0,
@@ -332,7 +466,7 @@ export const getProductAnalytics = async (
     { $sort: { "_id.date": 1, revenue: -1 } },
     {
       $project: {
-        itemId: "$_id.itemId",
+        itemId: { $toString: "$_id.itemId" },
         itemName: 1,
         date: "$_id.date",
         qty: 1,
@@ -342,10 +476,55 @@ export const getProductAnalytics = async (
     },
   ]);
 
+  // Revenue by category
+  const revenueByCategory = await Order.aggregate([
+    { $match: matchQuery },
+    { $unwind: "$items" },
+    {
+      $lookup: {
+        from: "items",
+        localField: "items.itemId",
+        foreignField: "_id",
+        as: "itemDetails",
+      },
+    },
+    { $unwind: { path: "$itemDetails", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "itemDetails.categoryId",
+        foreignField: "_id",
+        as: "categoryDetails",
+      },
+    },
+    { $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: "$itemDetails.categoryId",
+        categoryName: { $first: "$categoryDetails.name" },
+        revenue: {
+          $sum: { $multiply: ["$items.priceSnapshot", "$items.qty"] },
+        },
+        itemCount: { $addToSet: "$items.itemId" },
+      },
+    },
+    {
+      $project: {
+        categoryId: { $toString: "$_id" },
+        categoryName: { $ifNull: ["$categoryName", "Uncategorized"] },
+        revenue: 1,
+        itemCount: { $size: "$itemCount" },
+        _id: 0,
+      },
+    },
+    { $sort: { revenue: -1 } },
+  ]);
+
   return {
     bestSellingItems,
     revenueByProduct,
     productPerformance,
+    revenueByCategory,
   };
 };
 
@@ -502,6 +681,20 @@ export interface InventoryAnalytics {
     date: string;
     quantity: number;
   }>;
+  topSelling: Array<{
+    inventoryId: string;
+    inventoryName: string;
+    quantity: number;
+    value: number;
+  }>;
+  lowStockItems: Array<{
+    inventoryId: string;
+    inventoryName: string;
+    quantity: number;
+    unit: string;
+  }>;
+  inventoryValue: number;
+  totalItems: number;
 }
 
 export const getInventoryAnalytics = async (
@@ -520,7 +713,225 @@ export const getInventoryAnalytics = async (
     },
   ]);
 
+  // Get all inventory items with their current state
+  const allInventory = await Inventory.find({}).lean();
+
+  // Low stock items (quantity <= 0)
+  const lowStockItems = allInventory
+    .filter((inv) => inv.quantity <= 0)
+    .map((inv) => ({
+      inventoryId: inv._id.toString(),
+      inventoryName: inv.name,
+      quantity: inv.quantity,
+      unit: inv.unit,
+    }));
+
+  // Top selling inventory (by quantity - for now, we'll use current quantity as a proxy)
+  // In a real system, you'd track consumption through orders
+  const topSelling = allInventory
+    .map((inv) => ({
+      inventoryId: inv._id.toString(),
+      inventoryName: inv.name,
+      quantity: inv.quantity,
+      value: inv.quantity * inv.price,
+    }))
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10);
+
+  // Total inventory value
+  const inventoryValue = allInventory.reduce(
+    (sum, inv) => sum + inv.quantity * inv.price,
+    0
+  );
+
   return {
     stockLevels,
+    topSelling,
+    lowStockItems,
+    inventoryValue,
+    totalItems: allInventory.length,
+  };
+};
+
+// Order Analytics
+export interface OrderAnalyticsFilters {
+  startDate?: Date;
+  endDate?: Date;
+}
+
+export interface OrderAnalytics {
+  orderVolumeTrend: Array<{ date: string; count: number; total: number }>;
+  averageOrderValue: number;
+  ordersByStatus: {
+    OPEN: number;
+    VOIDED: number;
+    PAID_TO_CASHIER: number;
+    TRANSFERRED_TO_OWNER: number;
+    OWNER_CONFIRMED: number;
+    DISPUTED: number;
+  };
+  peakHours: Array<{ hour: number; count: number }>;
+}
+
+export const getOrderAnalytics = async (
+  filters: OrderAnalyticsFilters = {}
+): Promise<OrderAnalytics> => {
+  const matchQuery: any = {};
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) {
+      matchQuery.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      matchQuery.createdAt.$lte = filters.endDate;
+    }
+  }
+
+  // Order volume trend
+  const orderVolumeTrend = await Order.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+    { $sort: { _id: 1 } },
+    {
+      $project: {
+        date: "$_id",
+        count: 1,
+        total: 1,
+        _id: 0,
+      },
+    },
+  ]);
+
+  // Orders by status
+  const ordersByStatus = await Order.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const statusMap: Record<string, number> = {
+    OPEN: 0,
+    VOIDED: 0,
+    PAID_TO_CASHIER: 0,
+    TRANSFERRED_TO_OWNER: 0,
+    OWNER_CONFIRMED: 0,
+    DISPUTED: 0,
+  };
+
+  ordersByStatus.forEach((item) => {
+    statusMap[item._id] = item.count;
+  });
+
+  // Average order value
+  const avgOrderValueResult = await Order.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: null,
+        avgValue: { $avg: "$totalAmount" },
+      },
+    },
+  ]);
+
+  // Peak hours
+  const peakHours = await Order.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: { $hour: "$createdAt" },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { count: -1 } },
+    {
+      $project: {
+        hour: "$_id",
+        count: 1,
+        _id: 0,
+      },
+    },
+  ]);
+
+  return {
+    orderVolumeTrend,
+    averageOrderValue: avgOrderValueResult[0]?.avgValue || 0,
+    ordersByStatus: statusMap,
+    peakHours,
+  };
+};
+
+// Comprehensive Analytics
+export interface ComprehensiveAnalyticsFilters {
+  startDate?: Date;
+  endDate?: Date;
+}
+
+export interface ComprehensiveAnalytics {
+  cashFlow: SalesAnalytics;
+  inventory: InventoryAnalytics;
+  menu: ProductAnalytics;
+  orders: OrderAnalytics;
+  summary: {
+    totalRevenue: number;
+    totalOrders: number;
+    averageOrderValue: number;
+    lowStockItemsCount: number;
+  };
+}
+
+export const getComprehensiveAnalytics = async (
+  filters: ComprehensiveAnalyticsFilters = {}
+): Promise<ComprehensiveAnalytics> => {
+  const [cashFlow, inventory, menu, orders] = await Promise.all([
+    getSalesAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getInventoryAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getProductAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getOrderAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+  ]);
+
+  // Calculate summary stats
+  const totalRevenue = cashFlow.revenueTrend.reduce(
+    (sum, day) => sum + day.total,
+    0
+  );
+  const totalOrders = orders.orderVolumeTrend.reduce(
+    (sum, day) => sum + day.count,
+    0
+  );
+
+  return {
+    cashFlow,
+    inventory,
+    menu,
+    orders,
+    summary: {
+      totalRevenue,
+      totalOrders,
+      averageOrderValue: orders.averageOrderValue,
+      lowStockItemsCount: inventory.lowStockItems.length,
+    },
   };
 };

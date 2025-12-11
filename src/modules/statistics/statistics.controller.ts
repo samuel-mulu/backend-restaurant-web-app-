@@ -135,3 +135,29 @@ export const getInventory = async (
   }
 };
 
+export const getComprehensive = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const filters = {
+      startDate: req.query.startDate
+        ? new Date(req.query.startDate as string)
+        : undefined,
+      endDate: req.query.endDate
+        ? new Date(req.query.endDate as string)
+        : undefined,
+    };
+
+    const analytics = await statisticsService.getComprehensiveAnalytics(filters);
+
+    res.status(200).json({
+      success: true,
+      data: analytics,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
