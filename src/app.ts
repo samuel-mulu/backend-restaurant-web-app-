@@ -50,6 +50,15 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get("/", (req, res) => {
+  res.json({
+    message: "Restaurant Menu API Server",
+    status: "running",
+    health: "/health",
+    api: "/api/v1",
+  });
+});
+
 app.get("/health", (req, res) => {
   const mongoHealth = getMongoHealth();
   res.json({
