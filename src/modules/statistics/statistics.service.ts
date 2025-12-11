@@ -877,23 +877,389 @@ export interface ComprehensiveAnalyticsFilters {
   endDate?: Date;
 }
 
+export interface TableAnalytics {
+  salesByTable: Array<{
+    tableNumber: string;
+    orderCount: number;
+    totalRevenue: number;
+    avgOrderValue: number;
+  }>;
+  topTables: Array<{
+    tableNumber: string;
+    totalRevenue: number;
+    orderCount: number;
+  }>;
+}
+
+export interface TimingAnalytics {
+  averageOrderCompletionTime: number; // in minutes
+  averagePaymentTime: number; // in minutes
+  averageTimeToCashier: number; // in minutes
+  orderTimingDistribution: Array<{
+    timeRange: string;
+    count: number;
+  }>;
+}
+
+export interface DayOfWeekAnalytics {
+  salesByDayOfWeek: Array<{
+    dayOfWeek: string;
+    dayNumber: number;
+    totalRevenue: number;
+    orderCount: number;
+    avgOrderValue: number;
+  }>;
+}
+
+export interface VoidAnalytics {
+  voidedOrdersCount: number;
+  voidedOrdersRevenue: number;
+  voidRate: number; // percentage
+  voidedOrdersByReason?: Array<{
+    reason?: string;
+    count: number;
+    revenue: number;
+  }>;
+}
+
 export interface ComprehensiveAnalytics {
   cashFlow: SalesAnalytics;
   inventory: InventoryAnalytics;
   menu: ProductAnalytics;
   orders: OrderAnalytics;
+  staff: StaffPerformance;
+  tables: TableAnalytics;
+  timing: TimingAnalytics;
+  dayOfWeek: DayOfWeekAnalytics;
+  voids: VoidAnalytics;
   summary: {
     totalRevenue: number;
     totalOrders: number;
     averageOrderValue: number;
     lowStockItemsCount: number;
+    activeStaffCount: number;
+    voidedOrdersCount: number;
+    averageOrderCompletionTime: number;
+    topSellingCategory: string;
+    busiestDay: string;
+    busiestHour: number;
   };
 }
+
+const getTableAnalytics = async (
+  filters: ComprehensiveAnalyticsFilters = {}
+): Promise<TableAnalytics> => {
+  const matchQuery: any = {
+    status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+  };
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) {
+      matchQuery.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      matchQuery.createdAt.$lte = filters.endDate;
+    }
+  }
+
+  // Sales by table
+  const salesByTable = await Order.aggregate([
+    { $match: { ...matchQuery, tableNumber: { $exists: true, $ne: "" } } },
+    {
+      $group: {
+        _id: "$tableNumber",
+        orderCount: { $sum: 1 },
+        totalRevenue: { $sum: "$totalAmount" },
+        avgOrderValue: { $avg: "$totalAmount" },
+      },
+    },
+    {
+      $project: {
+        tableNumber: "$_id",
+        orderCount: 1,
+        totalRevenue: 1,
+        avgOrderValue: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { totalRevenue: -1 } },
+  ]);
+
+  // Top tables
+  const topTables = salesByTable.slice(0, 10);
+
+  return {
+    salesByTable,
+    topTables,
+  };
+};
+
+const getTimingAnalytics = async (
+  filters: ComprehensiveAnalyticsFilters = {}
+): Promise<TimingAnalytics> => {
+  const matchQuery: any = {};
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) {
+      matchQuery.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      matchQuery.createdAt.$lte = filters.endDate;
+    }
+  }
+
+  // Get orders with timing data
+  const ordersWithTiming = await Order.find({
+    ...matchQuery,
+    completedAt: { $exists: true },
+    placedAt: { $exists: true },
+  }).lean();
+
+  // Calculate average completion time
+  let totalCompletionTime = 0;
+  let completionCount = 0;
+
+  ordersWithTiming.forEach((order) => {
+    if (order.completedAt && order.placedAt) {
+      const timeDiff =
+        (new Date(order.completedAt).getTime() -
+          new Date(order.placedAt).getTime()) /
+        (1000 * 60); // Convert to minutes
+      if (timeDiff > 0) {
+        totalCompletionTime += timeDiff;
+        completionCount++;
+      }
+    }
+  });
+
+  const averageOrderCompletionTime =
+    completionCount > 0 ? totalCompletionTime / completionCount : 0;
+
+  // Calculate average payment time
+  const ordersWithPayment = await Order.find({
+    ...matchQuery,
+    paymentReceivedAt: { $exists: true },
+    placedAt: { $exists: true },
+  }).lean();
+
+  let totalPaymentTime = 0;
+  let paymentCount = 0;
+
+  ordersWithPayment.forEach((order) => {
+    if (order.paymentReceivedAt && order.placedAt) {
+      const timeDiff =
+        (new Date(order.paymentReceivedAt).getTime() -
+          new Date(order.placedAt).getTime()) /
+        (1000 * 60);
+      if (timeDiff > 0) {
+        totalPaymentTime += timeDiff;
+        paymentCount++;
+      }
+    }
+  });
+
+  const averagePaymentTime =
+    paymentCount > 0 ? totalPaymentTime / paymentCount : 0;
+
+  // Calculate average time to cashier
+  const ordersToCashier = await Order.find({
+    ...matchQuery,
+    paymentDeliveredAt: { $exists: true },
+    paymentReceivedAt: { $exists: true },
+  }).lean();
+
+  let totalCashierTime = 0;
+  let cashierCount = 0;
+
+  ordersToCashier.forEach((order) => {
+    if (order.paymentDeliveredAt && order.paymentReceivedAt) {
+      const timeDiff =
+        (new Date(order.paymentDeliveredAt).getTime() -
+          new Date(order.paymentReceivedAt).getTime()) /
+        (1000 * 60);
+      if (timeDiff > 0) {
+        totalCashierTime += timeDiff;
+        cashierCount++;
+      }
+    }
+  });
+
+  const averageTimeToCashier =
+    cashierCount > 0 ? totalCashierTime / cashierCount : 0;
+
+  // Order timing distribution (buckets: 0-15min, 15-30min, 30-60min, 60+min)
+  const timingBuckets = {
+    "0-15": 0,
+    "15-30": 0,
+    "30-60": 0,
+    "60+": 0,
+  };
+
+  ordersWithTiming.forEach((order) => {
+    if (order.completedAt && order.placedAt) {
+      const timeDiff =
+        (new Date(order.completedAt).getTime() -
+          new Date(order.placedAt).getTime()) /
+        (1000 * 60);
+      if (timeDiff <= 15) {
+        timingBuckets["0-15"]++;
+      } else if (timeDiff <= 30) {
+        timingBuckets["15-30"]++;
+      } else if (timeDiff <= 60) {
+        timingBuckets["30-60"]++;
+      } else {
+        timingBuckets["60+"]++;
+      }
+    }
+  });
+
+  const orderTimingDistribution = Object.entries(timingBuckets).map(
+    ([timeRange, count]) => ({
+      timeRange: `${timeRange} min`,
+      count,
+    })
+  );
+
+  return {
+    averageOrderCompletionTime: Math.round(averageOrderCompletionTime * 10) / 10,
+    averagePaymentTime: Math.round(averagePaymentTime * 10) / 10,
+    averageTimeToCashier: Math.round(averageTimeToCashier * 10) / 10,
+    orderTimingDistribution,
+  };
+};
+
+const getDayOfWeekAnalytics = async (
+  filters: ComprehensiveAnalyticsFilters = {}
+): Promise<DayOfWeekAnalytics> => {
+  const matchQuery: any = {
+    status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
+  };
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) {
+      matchQuery.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      matchQuery.createdAt.$lte = filters.endDate;
+    }
+  }
+
+  const salesByDayOfWeek = await Order.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: { $dayOfWeek: "$createdAt" },
+        totalRevenue: { $sum: "$totalAmount" },
+        orderCount: { $sum: 1 },
+        avgOrderValue: { $avg: "$totalAmount" },
+      },
+    },
+    {
+      $project: {
+        dayNumber: "$_id",
+        totalRevenue: 1,
+        orderCount: 1,
+        avgOrderValue: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { dayNumber: 1 } },
+  ]);
+
+  const dayNames = [
+    "",
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const formattedSales = salesByDayOfWeek.map((item) => ({
+    dayOfWeek: dayNames[item.dayNumber] || "Unknown",
+    dayNumber: item.dayNumber,
+    totalRevenue: item.totalRevenue,
+    orderCount: item.orderCount,
+    avgOrderValue: item.avgOrderValue,
+  }));
+
+  return {
+    salesByDayOfWeek: formattedSales,
+  };
+};
+
+const getVoidAnalytics = async (
+  filters: ComprehensiveAnalyticsFilters = {}
+): Promise<VoidAnalytics> => {
+  const matchQuery: any = {
+    status: "VOIDED",
+  };
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) {
+      matchQuery.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      matchQuery.createdAt.$lte = filters.endDate;
+    }
+  }
+
+  const voidedOrders = await Order.aggregate([
+    { $match: matchQuery },
+    {
+      $group: {
+        _id: null,
+        count: { $sum: 1 },
+        totalRevenue: { $sum: "$totalAmount" },
+      },
+    },
+  ]);
+
+  const voidedOrdersCount = voidedOrders[0]?.count || 0;
+  const voidedOrdersRevenue = voidedOrders[0]?.totalRevenue || 0;
+
+  // Get total orders for void rate calculation
+  const totalMatchQuery: any = {};
+  if (filters.startDate || filters.endDate) {
+    totalMatchQuery.createdAt = {};
+    if (filters.startDate) {
+      totalMatchQuery.createdAt.$gte = filters.startDate;
+    }
+    if (filters.endDate) {
+      totalMatchQuery.createdAt.$lte = filters.endDate;
+    }
+  }
+
+  const totalOrders = await Order.countDocuments(totalMatchQuery);
+  const voidRate = totalOrders > 0 ? (voidedOrdersCount / totalOrders) * 100 : 0;
+
+  return {
+    voidedOrdersCount,
+    voidedOrdersRevenue,
+    voidRate: Math.round(voidRate * 10) / 10,
+  };
+};
 
 export const getComprehensiveAnalytics = async (
   filters: ComprehensiveAnalyticsFilters = {}
 ): Promise<ComprehensiveAnalytics> => {
-  const [cashFlow, inventory, menu, orders] = await Promise.all([
+  const [
+    cashFlow,
+    inventory,
+    menu,
+    orders,
+    staff,
+    tables,
+    timing,
+    dayOfWeek,
+    voids,
+  ] = await Promise.all([
     getSalesAnalytics({
       startDate: filters.startDate,
       endDate: filters.endDate,
@@ -910,6 +1276,26 @@ export const getComprehensiveAnalytics = async (
       startDate: filters.startDate,
       endDate: filters.endDate,
     }),
+    getStaffPerformance({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getTableAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getTimingAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getDayOfWeekAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    getVoidAnalytics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
   ]);
 
   // Calculate summary stats
@@ -922,16 +1308,53 @@ export const getComprehensiveAnalytics = async (
     0
   );
 
+  // Get active staff count
+  const activeStaffCount = await User.countDocuments({
+    status: "active",
+    role: { $in: ["cashier", "waiter"] },
+  });
+
+  // Get top selling category
+  const topCategory =
+    menu.revenueByCategory.length > 0
+      ? menu.revenueByCategory[0].categoryName
+      : "N/A";
+
+  // Get busiest day
+  const busiestDayData = dayOfWeek.salesByDayOfWeek.reduce(
+    (max, day) => (day.orderCount > max.orderCount ? day : max),
+    dayOfWeek.salesByDayOfWeek[0] || { dayOfWeek: "N/A", orderCount: 0 }
+  );
+  const busiestDay = busiestDayData.dayOfWeek;
+
+  // Get busiest hour
+  const busiestHourData = orders.peakHours.reduce(
+    (max, hour) => (hour.count > max.count ? hour : max),
+    orders.peakHours[0] || { hour: 0, count: 0 }
+  );
+  const busiestHour = busiestHourData.hour;
+
   return {
     cashFlow,
     inventory,
     menu,
     orders,
+    staff,
+    tables,
+    timing,
+    dayOfWeek,
+    voids,
     summary: {
       totalRevenue,
       totalOrders,
       averageOrderValue: orders.averageOrderValue,
       lowStockItemsCount: inventory.lowStockItems.length,
+      activeStaffCount,
+      voidedOrdersCount: voids.voidedOrdersCount,
+      averageOrderCompletionTime: timing.averageOrderCompletionTime,
+      topSellingCategory: topCategory,
+      busiestDay,
+      busiestHour,
     },
   };
 };
