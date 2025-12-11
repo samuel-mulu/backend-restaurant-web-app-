@@ -29,6 +29,9 @@ export interface CreateItemInput {
   price?: number;
   isAvailable?: boolean;
   clientId?: string;
+  ingredients?: string[];
+  mealType?: "breakfast" | "lunch" | "dinner" | "treats";
+  special?: boolean;
 }
 
 export interface UpdateItemInput {
@@ -37,6 +40,9 @@ export interface UpdateItemInput {
   description?: string;
   price?: number;
   isAvailable?: boolean;
+  ingredients?: string[];
+  mealType?: "breakfast" | "lunch" | "dinner" | "treats";
+  special?: boolean;
 }
 
 export interface ListItemsFilters {
@@ -155,6 +161,7 @@ export const createItem = async (
     const itemData: any = {
       ...data,
       categoryId: new Types.ObjectId(data.categoryId),
+      approvalStatus: "pendingapproval", // New items require approval
     };
 
     // Add image if uploaded
@@ -300,6 +307,7 @@ export const updateItem = async (
     const { __v, ...updateDataWithoutVersion } = data;
     const updateData: any = {
       ...updateDataWithoutVersion,
+      approvalStatus: "pendingapproval", // Updates require re-approval
     };
 
     // Update image if new one was uploaded
@@ -486,4 +494,127 @@ export const updateAvailability = async (
     { isAvailable },
     { new: true, runValidators: true }
   ).populate("category");
+};
+
+/**
+ * Lists items pending approval
+ * @returns Array of items with approvalStatus "pendingapproval"
+ */
+export const listPendingApprovals = async (): Promise<any[]> => {
+  // Query for pending approval items
+  // Note: The pre-hook automatically adds isDeleted: false, but we include it explicitly for clarity
+  const query = Item.find({
+    approvalStatus: "pendingapproval",
+    isDeleted: false,
+  });
+
+  const items = await query
+    .populate("category", "name id")
+    .populate("approvedBy", "name id")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  console.log(`[listPendingApprovals] Query returned ${items.length} items`);
+
+  // Transform _id to id for lean documents and handle populated fields
+  return items.map((item: any) => {
+    const result: any = {
+      ...item,
+      id: item._id?.toString() || item.id,
+    };
+    // Remove _id from result
+    delete result._id;
+
+    // Handle category if populated
+    if (item.category) {
+      result.category = {
+        ...item.category,
+        id: item.category._id?.toString() || item.category.id,
+      };
+      delete result.category._id;
+    }
+
+    // Handle approvedBy if populated
+    if (item.approvedBy) {
+      result.approvedBy = {
+        ...item.approvedBy,
+        id: item.approvedBy._id?.toString() || item.approvedBy.id,
+      };
+      delete result.approvedBy._id;
+    }
+
+    return result;
+  });
+};
+
+/**
+ * Approves an item
+ * @param id - Item ID
+ * @param approvedBy - User ID who approved
+ * @returns Updated item with populated category
+ * @throws {ItemServiceError} If item not found
+ */
+export const approveItem = async (
+  id: string,
+  approvedBy: string
+): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
+  if (!Types.ObjectId.isValid(approvedBy)) {
+    throw new ItemServiceError(400, "Invalid user ID", "INVALID_USER_ID");
+  }
+
+  const updated = await Item.findOneAndUpdate(
+    { _id: id, isDeleted: false },
+    {
+      approvalStatus: "approved",
+      approvedBy: new Types.ObjectId(approvedBy),
+      approvedAt: new Date(),
+    },
+    { new: true, runValidators: true }
+  ).populate("category");
+
+  if (!updated) {
+    throw new ItemServiceError(404, "Item not found", "ITEM_NOT_FOUND");
+  }
+
+  return updated;
+};
+
+/**
+ * Rejects an item
+ * @param id - Item ID
+ * @param approvedBy - User ID who rejected
+ * @returns Updated item with populated category
+ * @throws {ItemServiceError} If item not found
+ */
+export const rejectItem = async (
+  id: string,
+  approvedBy: string
+): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
+  if (!Types.ObjectId.isValid(approvedBy)) {
+    throw new ItemServiceError(400, "Invalid user ID", "INVALID_USER_ID");
+  }
+
+  const updated = await Item.findOneAndUpdate(
+    { _id: id, isDeleted: false },
+    {
+      approvalStatus: "rejected",
+      approvedBy: new Types.ObjectId(approvedBy),
+      approvedAt: new Date(),
+    },
+    { new: true, runValidators: true }
+  ).populate("category");
+
+  if (!updated) {
+    throw new ItemServiceError(404, "Item not found", "ITEM_NOT_FOUND");
+  }
+
+  return updated;
 };

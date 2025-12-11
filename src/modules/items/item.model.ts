@@ -18,6 +18,13 @@ export interface ItemDoc extends Document {
   isDeleted: boolean;
   deletedAt?: Date;
   clientId?: string;
+  approvalStatus: "pendingapproval" | "approved" | "rejected";
+  approvedBy?: Types.ObjectId;
+  approvedAt?: Date;
+  ingredients?: string[];
+  mealType?: "breakfast" | "lunch" | "dinner" | "treats";
+  comments?: string[];
+  special?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +66,33 @@ const ItemSchema = new Schema<ItemDoc>(
     deletedAt: Date,
 
     clientId: { type: String, index: true },
+
+    approvalStatus: {
+      type: String,
+      enum: ["pendingapproval", "approved", "rejected"],
+      default: "pendingapproval",
+      index: true,
+    },
+
+    approvedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      sparse: true,
+    },
+
+    approvedAt: Date,
+
+    ingredients: [{ type: String, trim: true }],
+
+    mealType: {
+      type: String,
+      enum: ["breakfast", "lunch", "dinner", "treats"],
+      index: true,
+    },
+
+    comments: [{ type: String, trim: true }],
+
+    special: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,

@@ -78,6 +78,54 @@ const parseFormDataBody = (body: any) => {
     }
   }
 
+  // Parse ingredients array (can come as ingredients[] or ingredients from FormData)
+  // Check for both ingredients and ingredients[] keys (FormData might use brackets)
+  const ingredientsKey = parsed["ingredients[]"] !== undefined ? "ingredients[]" : "ingredients";
+  if (parsed[ingredientsKey] !== undefined) {
+    const ingredients = parsed[ingredientsKey];
+    if (Array.isArray(ingredients)) {
+      // Filter out empty strings
+      parsed.ingredients = ingredients.filter(
+        (ing: string) => ing && ing.trim() !== ""
+      );
+    } else if (typeof ingredients === "string") {
+      // Single value, convert to array
+      parsed.ingredients =
+        ingredients.trim() !== "" ? [ingredients] : [];
+    } else {
+      parsed.ingredients = [];
+    }
+    // Remove the original key if it was ingredients[]
+    if (ingredientsKey === "ingredients[]") {
+      delete parsed["ingredients[]"];
+    }
+  }
+
+  // Parse special (can be string from FormData)
+  if (parsed.special !== undefined) {
+    if (typeof parsed.special === "string") {
+      parsed.special = parsed.special === "true";
+    } else {
+      parsed.special = Boolean(parsed.special);
+    }
+  }
+
+  // mealType is already a string, no conversion needed
+  // But validate enum if provided
+  if (parsed.mealType !== undefined) {
+    const validMealTypes = ["breakfast", "lunch", "dinner", "treats"];
+    if (
+      typeof parsed.mealType === "string" &&
+      !validMealTypes.includes(parsed.mealType)
+    ) {
+      throw new ItemServiceError(
+        400,
+        `Invalid mealType. Must be one of: ${validMealTypes.join(", ")}`,
+        "INVALID_MEAL_TYPE"
+      );
+    }
+  }
+
   return parsed;
 };
 
@@ -202,6 +250,51 @@ export const availability = async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, item, "Availability updated");
+  } catch (err) {
+    return sendError(res, err);
+  }
+};
+
+export const listPendingApprovals = async (_req: Request, res: Response) => {
+  try {
+    const items = await itemService.listPendingApprovals();
+    console.log(`[listPendingApprovals] Found ${items.length} pending items`);
+    return sendSuccess(res, items, "Pending approvals retrieved");
+  } catch (err) {
+    console.error("[listPendingApprovals] Error:", err);
+    return sendError(res, err);
+  }
+};
+
+export const approveItem = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id || (req as any).user?._id;
+    if (!userId) {
+      return sendError(
+        res,
+        new ItemServiceError(401, "User not authenticated", "UNAUTHORIZED")
+      );
+    }
+
+    const item = await itemService.approveItem(req.params.id, userId);
+    return sendSuccess(res, item, "Item approved successfully");
+  } catch (err) {
+    return sendError(res, err);
+  }
+};
+
+export const rejectItem = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id || (req as any).user?._id;
+    if (!userId) {
+      return sendError(
+        res,
+        new ItemServiceError(401, "User not authenticated", "UNAUTHORIZED")
+      );
+    }
+
+    const item = await itemService.rejectItem(req.params.id, userId);
+    return sendSuccess(res, item, "Item rejected successfully");
   } catch (err) {
     return sendError(res, err);
   }

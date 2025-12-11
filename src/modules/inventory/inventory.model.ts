@@ -8,6 +8,9 @@ export interface InventoryDoc extends Document {
   unit: string;
   price: number;
   clientId?: string;
+  approvalStatus: "pendingapproval" | "approved" | "rejected";
+  approvedBy?: Types.ObjectId;
+  approvedAt?: Date;
 
   /** Virtuals */
   isLowStock: boolean;
@@ -53,6 +56,21 @@ const InventorySchema = new Schema<InventoryDoc>(
       sparse: true,
       index: true,
     },
+
+    approvalStatus: {
+      type: String,
+      enum: ["pendingapproval", "approved", "rejected"],
+      default: "pendingapproval",
+      index: true,
+    },
+
+    approvedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      sparse: true,
+    },
+
+    approvedAt: Date,
   },
   {
     timestamps: true,

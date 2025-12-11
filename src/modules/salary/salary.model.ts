@@ -127,6 +127,6 @@ SalarySchema.index({ staffId: 1, month: 1, year: 1 }, { unique: true });
 SalarySchema.index({ month: 1, year: 1, status: 1 });
 SalarySchema.index({ paymentDate: -1 });
 SalarySchema.index({ ethiopianYear: 1, ethiopianMonth: 1 });
-SalarySchema.index({ registeredDate: 1 });
+// Note: registeredDate already has index: true in field definition (line 94), no need for duplicatecdcdcd
 
 export const Salary = model<SalaryDoc>("Salary", SalarySchema);

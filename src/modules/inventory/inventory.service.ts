@@ -24,8 +24,11 @@ export interface UpdateInventoryInput {
 /* ---------------------- COMMON UTILS ---------------------- */
 
 const validateObjectId = (id: string, message = "Invalid ID") => {
-  if (id && !Types.ObjectId.isValid(id)) {
-    throw { status: 400, message };
+  if (!id) {
+    throw { status: 400, message: `${message}: ID is required` };
+  }
+  if (!Types.ObjectId.isValid(id)) {
+    throw { status: 400, message: `${message}: ${id} is not a valid ObjectId` };
   }
 };
 
@@ -72,6 +75,7 @@ export const createInventory = async (
     quantity: data.quantity,
     unit: data.unit,
     price: data.price,
+    approvalStatus: "pendingapproval", // New inventory requires approval
   });
 
   return inventory;
@@ -108,6 +112,9 @@ export const updateInventory = async (
     inventory.price = data.price;
   }
 
+  // Updates require re-approval
+  inventory.approvalStatus = "pendingapproval";
+
   await inventory.save();
 
   return inventory;
@@ -121,4 +128,85 @@ export const getLowStockItems = async () => {
   })
     .sort({ quantity: 1 })
     .lean();
+};
+
+/* ---------------------- APPROVAL ---------------------- */
+
+/**
+ * Lists inventory items pending approval
+ * @returns Array of inventory items with approvalStatus "pendingapproval"
+ */
+export const listPendingApprovals = async () => {
+  const items = await Inventory.find({
+    approvalStatus: "pendingapproval",
+  })
+    .populate("approvedBy")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // Transform _id to id for lean documents
+  return items.map((item: any) => ({
+    ...item,
+    id: item._id?.toString() || item.id,
+  }));
+};
+
+/**
+ * Approves an inventory item
+ * @param id - Inventory ID
+ * @param approvedBy - User ID who approved
+ * @returns Updated inventory item
+ */
+export const approveInventory = async (
+  id: string,
+  approvedBy: string
+): Promise<InventoryDoc | null> => {
+  validateObjectId(id, "Invalid inventory ID");
+  validateObjectId(approvedBy, "Invalid user ID");
+
+  const inventory = await Inventory.findByIdAndUpdate(
+    id,
+    {
+      approvalStatus: "approved",
+      approvedBy: new Types.ObjectId(approvedBy),
+      approvedAt: new Date(),
+    },
+    { new: true, runValidators: true }
+  );
+
+  if (!inventory) {
+    throw { status: 404, message: "Inventory item not found" };
+  }
+
+  return inventory;
+};
+
+/**
+ * Rejects an inventory item
+ * @param id - Inventory ID
+ * @param approvedBy - User ID who rejected
+ * @returns Updated inventory item
+ */
+export const rejectInventory = async (
+  id: string,
+  approvedBy: string
+): Promise<InventoryDoc | null> => {
+  validateObjectId(id, "Invalid inventory ID");
+  validateObjectId(approvedBy, "Invalid user ID");
+
+  const inventory = await Inventory.findByIdAndUpdate(
+    id,
+    {
+      approvalStatus: "rejected",
+      approvedBy: new Types.ObjectId(approvedBy),
+      approvedAt: new Date(),
+    },
+    { new: true, runValidators: true }
+  );
+
+  if (!inventory) {
+    throw { status: 404, message: "Inventory item not found" };
+  }
+
+  return inventory;
 };

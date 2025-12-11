@@ -88,3 +88,83 @@ export const getLowStock = async (
     next(err);
   }
 };
+
+export const listPendingApprovals = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const items = await inventoryService.listPendingApprovals();
+    return send(res, 200, {
+      message: "Pending approvals retrieved",
+      data: items,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const approveInventory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as any).user?.id || (req as any).user?._id;
+    if (!userId) {
+      return send(res, 401, { message: "User not authenticated" });
+    }
+
+    const inventoryId = req.params.id;
+    if (!inventoryId) {
+      return send(res, 400, { message: "Inventory ID is required" });
+    }
+
+    const inventory = await inventoryService.approveInventory(
+      inventoryId,
+      userId
+    );
+    return send(res, 200, {
+      message: "Inventory item approved successfully",
+      data: inventory,
+    });
+  } catch (err: any) {
+    if (err.status) {
+      return send(res, err.status, { message: err.message });
+    }
+    next(err);
+  }
+};
+
+export const rejectInventory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = (req as any).user?.id || (req as any).user?._id;
+    if (!userId) {
+      return send(res, 401, { message: "User not authenticated" });
+    }
+
+    const inventoryId = req.params.id;
+    if (!inventoryId) {
+      return send(res, 400, { message: "Inventory ID is required" });
+    }
+
+    const inventory = await inventoryService.rejectInventory(
+      inventoryId,
+      userId
+    );
+    return send(res, 200, {
+      message: "Inventory item rejected successfully",
+      data: inventory,
+    });
+  } catch (err: any) {
+    if (err.status) {
+      return send(res, err.status, { message: err.message });
+    }
+    next(err);
+  }
+};

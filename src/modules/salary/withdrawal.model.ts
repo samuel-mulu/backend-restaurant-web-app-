@@ -46,6 +46,6 @@ const WithdrawalSchema = new Schema<WithdrawalDoc>(
 
 // Indexes for performance
 WithdrawalSchema.index({ salaryId: 1, createdAt: -1 });
-WithdrawalSchema.index({ reason: 1 });
+// Note: reason already has index: true in field definition, no need for duplicate
 
 export const Withdrawal = model<WithdrawalDoc>("Withdrawal", WithdrawalSchema);
