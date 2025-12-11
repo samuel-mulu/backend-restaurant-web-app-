@@ -34,6 +34,7 @@ export interface UpdateSalaryInput {
   paymentDate?: Date;
   remarks?: string;
   ethiopianPaymentDate?: string;
+  registeredDate?: string; // YYYY-MM-DD (Ethiopian)
   salaryPeriod?: "monthly" | "per_month";
 }
 

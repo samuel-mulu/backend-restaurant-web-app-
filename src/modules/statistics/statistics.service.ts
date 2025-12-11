@@ -820,7 +820,14 @@ export const getOrderAnalytics = async (
     },
   ]);
 
-  const statusMap: Record<string, number> = {
+  const statusMap: {
+    OPEN: number;
+    VOIDED: number;
+    PAID_TO_CASHIER: number;
+    TRANSFERRED_TO_OWNER: number;
+    OWNER_CONFIRMED: number;
+    DISPUTED: number;
+  } = {
     OPEN: 0,
     VOIDED: 0,
     PAID_TO_CASHIER: 0,
@@ -830,7 +837,9 @@ export const getOrderAnalytics = async (
   };
 
   ordersByStatus.forEach((item) => {
-    statusMap[item._id] = item.count;
+    if (item._id in statusMap) {
+      statusMap[item._id as keyof typeof statusMap] = item.count;
+    }
   });
 
   // Average order value
