@@ -1,0 +1,56 @@
+import { Schema, model, Document, Types } from "mongoose";
+
+export interface PaymentDoc extends Document {
+  _id: Types.ObjectId;
+  id: string;
+  salaryId: Types.ObjectId;
+  amount: number;
+  paymentDate: Date;
+  paymentMethod?: string; // "cash", "bank_transfer", "check", etc.
+  remarks?: string;
+  createdBy: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const PaymentSchema = new Schema<PaymentDoc>(
+  {
+    salaryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Salary",
+      required: true,
+      index: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    paymentDate: {
+      type: Date,
+      required: true,
+      default: Date.now,
+      index: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "bank_transfer", "check", "mobile_money", "other"],
+    },
+    remarks: {
+      type: String,
+      trim: true,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+  },
+  { timestamps: true }
+);
+
+// Indexes for performance
+PaymentSchema.index({ salaryId: 1, paymentDate: -1 });
+PaymentSchema.index({ paymentMethod: 1 });
+
+export const Payment = model<PaymentDoc>("Payment", PaymentSchema);
