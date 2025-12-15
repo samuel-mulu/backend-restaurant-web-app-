@@ -683,8 +683,6 @@ POS_PRINTER_KEY=your-secret-key-here
 
 ### Receipt Formatting
 
-Receipts are automatically formatted when orders are created. The receipt includes:
-
 - Restaurant name and header
 - Order number and date
 - Table number (if applicable)
