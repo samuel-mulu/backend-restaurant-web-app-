@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 import { Category, CategoryDoc } from "./category.model";
+import { Item } from "../items/item.model";
 
 export class CategoryServiceError extends Error {
   constructor(
@@ -56,10 +57,38 @@ export const createCategory = async (data: {
 };
 
 /**
- * List Categories
+ * List Categories with item counts
  */
-export const listCategories = async (): Promise<CategoryDoc[]> => {
-  return Category.find({ isDeleted: false }).sort({ name: 1 });
+export const listCategories = async (): Promise<any[]> => {
+  const categories = await Category.find({ isDeleted: false }).sort({
+    name: 1,
+  });
+
+  // Get item counts per category using aggregation
+  const itemCounts = await Item.aggregate([
+    {
+      $match: { isDeleted: false },
+    },
+    {
+      $group: {
+        _id: "$categoryId",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  // Create a map of categoryId to count
+  const countMap = new Map<string, number>();
+  itemCounts.forEach((item: { _id: Types.ObjectId; count: number }) => {
+    countMap.set(item._id.toString(), item.count);
+  });
+
+  // Add item count to each category
+  return categories.map((category) => {
+    const categoryObj = category.toJSON();
+    categoryObj.products = countMap.get(category._id.toString()) || 0;
+    return categoryObj;
+  });
 };
 
 /**
@@ -129,6 +158,20 @@ export const removeCategory = async (
   const category = await Category.findById(id);
   if (!category || category.isDeleted) {
     throw new CategoryServiceError(404, "Category not found", "NOT_FOUND");
+  }
+
+  // Check if there are any items in this category
+  const itemCount = await Item.countDocuments({
+    categoryId: new Types.ObjectId(id),
+    isDeleted: false,
+  });
+
+  if (itemCount > 0) {
+    throw new CategoryServiceError(
+      409,
+      `Cannot delete category "${category.name}" because it contains ${itemCount} item(s). Please remove or reassign all items first.`,
+      "CATEGORY_HAS_ITEMS"
+    );
   }
 
   category.isDeleted = true;
