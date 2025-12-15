@@ -55,6 +55,7 @@ export type CreateOrderInput = {
   waiterId: string; // Required - order must be assigned to a waiter
   cashierId?: string; // Optional, will be auto-assigned from req.user if cashier
   clientId?: string; // For offline sync idempotency
+  markAsPaidToCashier?: boolean; // Optional - if true, order starts with PAID_TO_CASHIER status
 };
 
 export const createOrder = async (
@@ -135,8 +136,9 @@ export const createOrder = async (
     })),
     note: payload.note,
     totalAmount: subtotal,
-    status: "OPEN",
+    status: payload.markAsPaidToCashier ? "PAID_TO_CASHIER" : "OPEN",
     placedAt: new Date(),
+    paymentReceivedAt: payload.markAsPaidToCashier ? new Date() : undefined,
     waiterId: new Types.ObjectId(payload.waiterId),
     cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
     clientId: payload.clientId,

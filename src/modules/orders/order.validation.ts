@@ -42,6 +42,7 @@ export const createOrderSchema = Joi.object({
     })
     .optional(),
   discount: Joi.number().min(0).optional(),
+  markAsPaidToCashier: Joi.boolean().optional(),
 });
 
 export const updateOrderSchema = Joi.object({
