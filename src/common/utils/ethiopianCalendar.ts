@@ -205,6 +205,11 @@ export function formatEthiopianDate(date: EthiopianDate): string {
  * Parse Ethiopian date from string (YYYY-MM-DD format)
  */
 export function parseEthiopianDate(dateString: string): EthiopianDate {
+  // Validate input is a string
+  if (typeof dateString !== "string") {
+    throw new Error(`Invalid Ethiopian date: expected string, got ${typeof dateString}`);
+  }
+
   const parts = dateString.split("-");
   if (parts.length !== 3) {
     throw new Error("Invalid Ethiopian date format. Expected YYYY-MM-DD");

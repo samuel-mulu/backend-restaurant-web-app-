@@ -147,7 +147,7 @@ export const remove = async (
 
     res.status(200).json({
       success: true,
-      message: "Staff member deactivated successfully",
+      message: "Staff member deleted successfully",
       data: {
         id: staff._id,
       },

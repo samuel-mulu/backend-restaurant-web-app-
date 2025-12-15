@@ -187,12 +187,8 @@ export const update = async (req: RequestWithFile, res: Response) => {
 
 export const remove = async (req: Request, res: Response) => {
   try {
-    const item = await itemService.deleteItem(req.params.id);
-    if (!item) {
-      return sendError(res, new ItemServiceError(404, "Item not found"));
-    }
-
-    return sendSuccess(res, item, "Item soft-deleted");
+    await itemService.permanentDeleteItem(req.params.id);
+    return sendSuccess(res, null, "Item permanently deleted");
   } catch (err) {
     return sendError(res, err);
   }

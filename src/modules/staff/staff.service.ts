@@ -264,16 +264,8 @@ export const deleteStaff = async (id: string): Promise<UserDoc | null> => {
     throw { status: 400, message: "User is not a staff member" };
   }
 
-  // Check if already deleted
-  if (staff.isDeleted) {
-    throw { status: 404, message: "Staff member not found" };
-  }
-
-  // Soft delete: mark as deleted
-  staff.isDeleted = true;
-  staff.deletedAt = new Date();
-  await staff.save();
-
+  // Hard delete
+  await User.findByIdAndDelete(id);
   return staff;
 };
 
