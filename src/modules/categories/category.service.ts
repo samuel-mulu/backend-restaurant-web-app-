@@ -85,7 +85,7 @@ export const listCategories = async (): Promise<any[]> => {
 
   // Add item count to each category
   return categories.map((category) => {
-    const categoryObj = category.toJSON();
+    const categoryObj = category.toJSON() as any;
     categoryObj.products = countMap.get(category._id.toString()) || 0;
     return categoryObj;
   });

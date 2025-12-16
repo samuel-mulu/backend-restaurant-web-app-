@@ -28,15 +28,11 @@ export const createSalarySchema = Joi.object({
     .pattern(/^\d{4}-\d{2}-\d{2}$/)
     .message("Registered date must be in YYYY-MM-DD format (Ethiopian)")
     .required(),
-  paymentDate: Joi.string()
-    .pattern(/^\d{4}-\d{2}-\d{2}$/)
-    .message("Payment date must be in YYYY-MM-DD format (Ethiopian)")
-    .required(),
-  // Legacy field name (optional, for backward compatibility)
+  // Ethiopian payment date (required, but also accepts legacy field name)
   ethiopianPaymentDate: Joi.string()
     .pattern(/^\d{4}-\d{2}-\d{2}$/)
     .message("Ethiopian payment date must be in YYYY-MM-DD format")
-    .optional(),
+    .required(),
   salaryPeriod: Joi.string().valid("monthly", "per_month").optional(),
 });
 
