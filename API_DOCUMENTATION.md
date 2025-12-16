@@ -40,7 +40,6 @@ Authorization: Bearer <token>
 - `status` (optional): Filter by status (active, inactive)
 - `search` (optional): Search by name, email, or phone
 - `page` (optional): Page number (default: 1)
-- `limit` (optional): Items per page (default: 50, max: 100)
 
 **Response**:
 
