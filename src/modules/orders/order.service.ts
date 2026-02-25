@@ -977,7 +977,7 @@ export const markOrderAsPrinted = async (id: string) => {
   return order;
 };
 
-export async function printOrder(orderId: string) {
+export async function printOrder(orderId: string): Promise<{ order: OrderDoc; receiptText: string }> {
   const order = await Order.findById(orderId);
   if (!order) throw new Error("Order not found");
 
@@ -992,38 +992,13 @@ export async function printOrder(orderId: string) {
   await populateUserTrackingFields(order);
 
   console.log(
-    `[PRINT ORDER] Order ${order.orderNumber} requested for printing`
+    `[PRINT ORDER] Order ${order.orderNumber} receipt text requested`
   );
 
   // Format receipt text
   const receiptText = formatReceipt(order);
 
-  // Send print request to POS Printer Service
-  try {
-    const printResult = await printReceipt(receiptText);
-
-    if (printResult.success) {
-      console.log(
-        `[PRINT ORDER] Successfully sent print job for order ${order.orderNumber}`
-      );
-    } else {
-      // Log warning but don't fail the request
-      // This allows order processing to continue even if printer is unavailable
-      console.warn(
-        `[PRINT ORDER] Print job failed for order ${order.orderNumber}:`,
-        printResult.error || printResult.message
-      );
-    }
-  } catch (error) {
-    // Log error but don't fail the request
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(
-      `[PRINT ORDER] Unexpected error while printing order ${order.orderNumber}:`,
-      errorMessage
-    );
-  }
-
-  return order;
+  return { order, receiptText };
 }
 
 export const cancelOrder = async (
@@ -1032,9 +1007,6 @@ export const cancelOrder = async (
 ): Promise<OrderDoc | null> => {
   const order = await Order.findById(id);
 
-  if (!order) {
-    throw { status: 404, message: "Order not found" };
-  }
 
   // Validate user permissions
   const user = await User.findById(userId);

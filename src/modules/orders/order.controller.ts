@@ -295,13 +295,13 @@ export const markAsPrinted = async (req: Request, res: Response) => {
 
 export const printOrder = async (req: Request, res: Response) => {
   try {
-    const order = await orderService.printOrder(req.params.id);
-    res.json({ success: true, order });
+    const { order, receiptText } = await orderService.printOrder(req.params.id);
+    res.json({ success: true, order, receiptText });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Error printing order:", errorMessage);
+    console.error("Error generating receipt text:", errorMessage);
     res.status(500).json({
-      error: "Failed to print order",
+      error: "Failed to generate receipt",
       details: errorMessage,
     });
   }
