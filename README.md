@@ -1,8 +1,7 @@
 ## Restaurant Management System Backen
 A comprehensive, production-ready backend system for restaurant management built with Express.js, TypeScript, and MongoDB. This system supports multi-role access control (Owner, Cashier, Waiter), real-time order management, inventory tracking, staff management, salary processing, receipt printing, and comprehensive analytics.
 
-## 📋 Table of Contents
-
+## 📋 Table of Content
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
