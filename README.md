@@ -7,7 +7,7 @@ A comprehensive, production-ready backend system for restaurant management built
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-- [Configuration](#configuration)
+[Configuration](#configuration)
 - [Running the Application](#running-the-application)
 - [API Documentation](#api-documentation)
 - [Authentication & Authorization](#authentication--authorization)
