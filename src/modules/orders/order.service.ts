@@ -2,8 +2,8 @@ import { Types } from "mongoose";
 import { formatReceipt } from "../../common/utils/receiptFormatter";
 import { deleteImage, uploadImage } from "../../config/cloudinary";
 import {
-  notifyCashiersNewOrder,
-  notifyCustomerOrderUpdated,
+    notifyCashiersNewOrder,
+    notifyCustomerOrderUpdated,
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
 import { Inventory } from "../inventory/inventory.model";
