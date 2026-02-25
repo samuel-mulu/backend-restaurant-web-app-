@@ -57,13 +57,13 @@ export function formatReceipt(order: OrderDoc): string {
     const nameLine = `${quantity}x ${itemName}`;
     if (nameLine.length <= MAX_LINE_WIDTH - 12) {
       lines.push(nameLine);
-      lines.push(line(`  @${price.toFixed(2)}`, `ብር${subtotal.toFixed(2)}`));
+      lines.push(line(`  @${price.toFixed(2)}`, `BIRR ${subtotal.toFixed(2)}`));
     } else {
       // Wrap item name if needed
       lines.push(`${quantity}x`);
       const wrappedName = wrapText(itemName, MAX_LINE_WIDTH - 12);
       wrappedName.forEach((line) => lines.push(`  ${line}`));
-      lines.push(line(`  @${price.toFixed(2)}`, `ብር${subtotal.toFixed(2)}`));
+      lines.push(line(`  @${price.toFixed(2)}`, `BIRR ${subtotal.toFixed(2)}`));
     }
   });
 
@@ -78,8 +78,11 @@ export function formatReceipt(order: OrderDoc): string {
   }
 
   // Total
+  const calculatedTotal = order.items.reduce((acc, item) => acc + (item.priceSnapshot * item.qty), 0);
+  const displayTotal = order.totalAmount || calculatedTotal;
+
   lines.push(separator("-"));
-  lines.push(line("TOTAL:", `ብር${order.totalAmount.toFixed(2)}`, MAX_LINE_WIDTH));
+  lines.push(line("TOTAL:", `BIRR ${displayTotal.toFixed(2)}`, MAX_LINE_WIDTH));
   lines.push(separator("-"));
 
   // Status
