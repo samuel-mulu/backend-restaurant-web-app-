@@ -1,13 +1,13 @@
 import { Request, Response } from "express";
-import * as orderService from "./order.service";
 import { OrderStatus } from "./order.model";
+import * as orderService from "./order.service";
 
 export const create = async (req: Request, res: Response) => {
   try {
     // Auto-assign cashierId if user is cashier
     const cashierId = req.user?.role === "cashier" ? req.user._id : undefined;
-    const order = await orderService.createOrder(req.body, cashierId);
-    res.status(201).json(order);
+    const { order, receiptText } = await orderService.createOrder(req.body, cashierId);
+    res.status(201).json({ ...order.toObject(), receiptText });
   } catch (error: any) {
     console.error("Error creating order:", error);
     if (error.status) {
