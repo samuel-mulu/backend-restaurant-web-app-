@@ -15,8 +15,10 @@ export interface PrintResult {
 export async function printReceipt(receiptData: string): Promise<PrintResult> {
   // Always use localhost - POS service runs on same PC as backend
   const printUrl = `${env.posPrinterUrl}/print`;
+  const printKey = env.posPrinterKey || "pos-printer-secret-key-2024";
 
   try {
+    console.log(`[POS Printer] Sending print request to: ${printUrl}`);
     const response = await axios.post<PrintResult>(
       printUrl,
       {
@@ -25,7 +27,7 @@ export async function printReceipt(receiptData: string): Promise<PrintResult> {
       {
         headers: {
           "Content-Type": "application/json",
-          "X-Print-Key": env.posPrinterKey || "dev-key-12345",
+          "X-Print-Key": printKey,
         },
         timeout: 5000, // 5 second timeout (reduced for faster response)
       }
@@ -52,6 +54,7 @@ export async function printReceipt(receiptData: string): Promise<PrintResult> {
         axiosError.code === "ECONNREFUSED" ||
         axiosError.code === "ETIMEDOUT"
       ) {
+        console.error(`[POS Printer] Connection error to ${printUrl}:`, axiosError.message);
         return {
           success: false,
           message: "POS Printer Service unavailable",
@@ -62,6 +65,10 @@ export async function printReceipt(receiptData: string): Promise<PrintResult> {
       // Handle HTTP errors
       if (axiosError.response) {
         const errorData = axiosError.response.data;
+        console.error(`[POS Printer] Error response from ${printUrl}:`, {
+          status: axiosError.response.status,
+          data: errorData,
+        });
         return {
           success: false,
           message: errorData?.message || "Print request failed",
@@ -72,6 +79,7 @@ export async function printReceipt(receiptData: string): Promise<PrintResult> {
 
     // Handle other errors
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[POS Printer] Unexpected error connecting to ${printUrl}:`, errorMessage);
     return {
       success: false,
       message: "Print request failed",

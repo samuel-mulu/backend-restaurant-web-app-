@@ -6,8 +6,8 @@ import { OrderDoc } from "../../modules/orders/order.model";
  */
 export function formatReceipt(order: OrderDoc): string {
   const MAX_LINE_WIDTH = 32;
-  const restaurantName = "3T JUICE";
-  
+  const restaurantName = "kandino's kitchen";
+
   // Helper function to center text
   const center = (text: string, width: number = MAX_LINE_WIDTH): string => {
     const padding = Math.max(0, Math.floor((width - text.length) / 2));
@@ -31,24 +31,22 @@ export function formatReceipt(order: OrderDoc): string {
   lines.push(separator("="));
   lines.push(center(restaurantName));
   lines.push(separator("="));
-  lines.push("");
 
   // Order Information
   lines.push(`Order: ${order.orderNumber}`);
   const orderDate = new Date(order.createdAt || order.placedAt);
   lines.push(`Date: ${orderDate.toLocaleDateString()} ${orderDate.toLocaleTimeString()}`);
-  
+
   if (order.tableNumber) {
     lines.push(`Table: ${order.tableNumber}`);
   }
-  
+
   lines.push(separator("-"));
-  lines.push("");
 
   // Items
   lines.push("ITEMS:");
   lines.push(separator("-"));
-  
+
   order.items.forEach((item) => {
     const itemName = item.nameSnapshot || (typeof item.itemId === "object" && (item.itemId as any)?.name) || "Unknown Item";
     const quantity = item.qty;
@@ -59,19 +57,17 @@ export function formatReceipt(order: OrderDoc): string {
     const nameLine = `${quantity}x ${itemName}`;
     if (nameLine.length <= MAX_LINE_WIDTH - 12) {
       lines.push(nameLine);
-      lines.push(line(`  @${price.toFixed(2)}`, `$${subtotal.toFixed(2)}`));
+      lines.push(line(`  @${price.toFixed(2)}`, `ብር${subtotal.toFixed(2)}`));
     } else {
       // Wrap item name if needed
       lines.push(`${quantity}x`);
       const wrappedName = wrapText(itemName, MAX_LINE_WIDTH - 12);
       wrappedName.forEach((line) => lines.push(`  ${line}`));
-      lines.push(line(`  @${price.toFixed(2)}`, `$${subtotal.toFixed(2)}`));
+      lines.push(line(`  @${price.toFixed(2)}`, `ብር${subtotal.toFixed(2)}`));
     }
-    lines.push("");
   });
 
   lines.push(separator("-"));
-  lines.push("");
 
   // Notes
   if (order.note) {
@@ -83,25 +79,23 @@ export function formatReceipt(order: OrderDoc): string {
 
   // Total
   lines.push(separator("-"));
-  lines.push(line("TOTAL:", `$${order.totalAmount.toFixed(2)}`, MAX_LINE_WIDTH));
+  lines.push(line("TOTAL:", `ብር${order.totalAmount.toFixed(2)}`, MAX_LINE_WIDTH));
   lines.push(separator("-"));
-  lines.push("");
 
   // Status
   lines.push(`Status: ${order.status}`);
-  
+
   // Staff Information
   if (order.waiterId && typeof order.waiterId === "object") {
     const waiterName = (order.waiterId as any).name || "Unknown";
     lines.push(`Waiter: ${waiterName}`);
   }
-  
+
   if (order.cashierId && typeof order.cashierId === "object") {
     const cashierName = (order.cashierId as any).name || "Unknown";
     lines.push(`Cashier: ${cashierName}`);
   }
 
-  lines.push("");
   lines.push(separator("="));
   lines.push(center("Thank you for your visit!"));
   lines.push(center("Have a great day!"));

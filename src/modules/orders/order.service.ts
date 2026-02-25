@@ -1,14 +1,13 @@
 import { Types } from "mongoose";
-import { Order, OrderDoc, OrderStatus, fixOrderCodeIndex } from "./order.model";
+import { formatReceipt } from "../../common/utils/receiptFormatter";
+import { deleteImage, uploadImage } from "../../config/cloudinary";
 import {
   notifyCashiersNewOrder,
   notifyCustomerOrderUpdated,
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
-import { formatReceipt } from "../../common/utils/receiptFormatter";
-import { printReceipt } from "../../common/utils/posPrinterClient";
 import { Inventory } from "../inventory/inventory.model";
-import { uploadImage, deleteImage } from "../../config/cloudinary";
+import { Order, OrderDoc, OrderStatus, fixOrderCodeIndex } from "./order.model";
 
 // Helper function to populate user tracking fields
 const populateUserTrackingFields = async (order: OrderDoc): Promise<void> => {
@@ -61,7 +60,7 @@ export type CreateOrderInput = {
 export const createOrder = async (
   payload: CreateOrderInput,
   cashierId?: string
-): Promise<OrderDoc> => {
+): Promise<{ order: OrderDoc; receiptText: string }> => {
   // Fix old orderCode index if it exists (one-time fix)
   await fixOrderCodeIndex().catch(() => {
     // Ignore errors - index fix is not critical for order creation
@@ -79,7 +78,8 @@ export const createOrder = async (
       await existing.populate("waiterId", "name email phone");
       await existing.populate("cashierId", "name email phone");
       await populateUserTrackingFields(existing);
-      return existing;
+      const receiptText = formatReceipt(existing);
+      return { order: existing, receiptText };
     }
   }
 
@@ -163,17 +163,10 @@ export const createOrder = async (
   // Broadcast the new order
   notifyCashiersNewOrder(order);
 
-  // Automatically print receipt when order is created (non-blocking)
+  // Automatically format receipt and return it
   const receiptText = formatReceipt(order);
-  printReceipt(receiptText).catch((error) => {
-    // Silent fail - printing shouldn't block order creation
-    console.warn(
-      `[PRINT] Failed for order ${order.orderNumber}:`,
-      error.message || error
-    );
-  });
 
-  return order;
+  return { order, receiptText };
 };
 
 export interface ListOrdersFilters {
@@ -984,7 +977,7 @@ export const markOrderAsPrinted = async (id: string) => {
   return order;
 };
 
-export async function printOrder(orderId: string) {
+export async function printOrder(orderId: string): Promise<{ order: OrderDoc; receiptText: string }> {
   const order = await Order.findById(orderId);
   if (!order) throw new Error("Order not found");
 
@@ -999,38 +992,13 @@ export async function printOrder(orderId: string) {
   await populateUserTrackingFields(order);
 
   console.log(
-    `[PRINT ORDER] Order ${order.orderNumber} requested for printing`
+    `[PRINT ORDER] Order ${order.orderNumber} receipt text requested`
   );
 
   // Format receipt text
   const receiptText = formatReceipt(order);
 
-  // Send print request to POS Printer Service
-  try {
-    const printResult = await printReceipt(receiptText);
-
-    if (printResult.success) {
-      console.log(
-        `[PRINT ORDER] Successfully sent print job for order ${order.orderNumber}`
-      );
-    } else {
-      // Log warning but don't fail the request
-      // This allows order processing to continue even if printer is unavailable
-      console.warn(
-        `[PRINT ORDER] Print job failed for order ${order.orderNumber}:`,
-        printResult.error || printResult.message
-      );
-    }
-  } catch (error) {
-    // Log error but don't fail the request
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(
-      `[PRINT ORDER] Unexpected error while printing order ${order.orderNumber}:`,
-      errorMessage
-    );
-  }
-
-  return order;
+  return { order, receiptText };
 }
 
 export const cancelOrder = async (
@@ -1042,7 +1010,6 @@ export const cancelOrder = async (
   if (!order) {
     throw { status: 404, message: "Order not found" };
   }
-
   // Validate user permissions
   const user = await User.findById(userId);
   if (!user) {
@@ -1251,11 +1218,11 @@ export const getCashierReport = async (
     ],
     ...(startDate || endDate
       ? {
-          createdAt: {
-            ...(startDate ? { $gte: startDate } : {}),
-            ...(endDate ? { $lte: endDate } : {}),
-          },
-        }
+        createdAt: {
+          ...(startDate ? { $gte: startDate } : {}),
+          ...(endDate ? { $lte: endDate } : {}),
+        },
+      }
       : {}),
   });
 
