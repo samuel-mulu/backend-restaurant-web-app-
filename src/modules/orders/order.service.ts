@@ -1007,7 +1007,9 @@ export const cancelOrder = async (
 ): Promise<OrderDoc | null> => {
   const order = await Order.findById(id);
 
-
+  if (!order) {
+    throw { status: 404, message: "Order not found" };
+  }
   // Validate user permissions
   const user = await User.findById(userId);
   if (!user) {
