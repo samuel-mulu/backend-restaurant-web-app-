@@ -135,14 +135,19 @@ export const updateStatus = async (req: Request, res: Response) => {
     // Get payment proof image file if provided (from multer)
     const paymentProofImageFile = req.file;
 
-    const order = await orderService.updateOrderStatus(
+    const result = await orderService.updateOrderStatus(
       req.params.id,
       status,
       req.user._id,
       paymentMethod,
       paymentProofImageFile
     );
-    res.json(order);
+
+    if (!result) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({ ...result.order.toObject(), receiptText: result.receiptText });
   } catch (error: any) {
     console.error("Error updating order status:", error);
     if (error.status) {

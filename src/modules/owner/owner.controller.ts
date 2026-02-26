@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
-import { User } from "../auth/user.model";
-import { Order } from "../orders/order.model";
-import { Item } from "../items/item.model";
-import { Category } from "../categories/category.model";
-import { Notification } from "../notification/notification.model";
 import { hashPassword } from "../../common/utils/password";
+import { User } from "../auth/user.model";
+import { Category } from "../categories/category.model";
+import { Item } from "../items/item.model";
+import { Order } from "../orders/order.model";
 import * as orderService from "../orders/order.service";
 
 // Get system overview/dashboard stats
@@ -245,15 +244,15 @@ export const acceptOrder = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    const order = await orderService.updateOrderStatus(
+    const result = await orderService.updateOrderStatus(
       req.params.id,
       "OWNER_CONFIRMED",
       userId
     );
-    if (!order) {
+    if (!result?.order) {
       return res.status(404).json({ error: "Order not found" });
     }
-    res.json(order);
+    res.json(result.order);
   } catch (error) {
     console.error("Error accepting order:", error);
     res.status(500).json({ error: "Failed to accept order" });
@@ -267,15 +266,15 @@ export const rejectOrder = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    const order = await orderService.updateOrderStatus(
+    const result = await orderService.updateOrderStatus(
       req.params.id,
       "VOIDED",
       userId
     );
-    if (!order) {
+    if (!result?.order) {
       return res.status(404).json({ error: "Order not found" });
     }
-    res.json(order);
+    res.json(result.order);
   } catch (error) {
     console.error("Error rejecting order:", error);
     res.status(500).json({ error: "Failed to reject order" });

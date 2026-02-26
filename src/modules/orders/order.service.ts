@@ -440,7 +440,7 @@ export const updateOrderStatus = async (
   userId: string,
   paymentMethod?: "cash" | "mobile_banking",
   paymentProofImageFile?: Express.Multer.File
-): Promise<OrderDoc | null> => {
+): Promise<{ order: OrderDoc; receiptText?: string } | null> => {
   const order = await Order.findById(id);
 
   if (!order) {
@@ -622,7 +622,13 @@ export const updateOrderStatus = async (
   // Broadcast status change
   notifyCustomerOrderUpdated(order, { updatedFields: { status } });
 
-  return order;
+  // Automatically format receipt if status changed to PAID_TO_CASHIER
+  let receiptText: string | undefined;
+  if (status === "PAID_TO_CASHIER") {
+    receiptText = formatReceipt(order);
+  }
+
+  return { order, receiptText };
 };
 
 /**
@@ -634,7 +640,7 @@ export const bulkUpdateOrderStatus = async (
   newStatus: OrderStatus,
   userId: string
 ): Promise<{
-  updated: OrderDoc[];
+  updated: Array<OrderDoc & { receiptText?: string }>;
   failed: Array<{ id: string; reason: string }>;
 }> => {
   if (!orderIds || orderIds.length === 0) {
@@ -802,7 +808,19 @@ export const bulkUpdateOrderStatus = async (
         updatedFields: { status: newStatus },
       });
 
-      updated.push(order);
+      // Generate receipt text if new status is PAID_TO_CASHIER
+      let receiptText: string | undefined;
+      if (newStatus === "PAID_TO_CASHIER") {
+        receiptText = formatReceipt(order);
+      }
+
+      // Add receiptText to the updated order object for the response
+      const orderWithReceipt = order.toObject() as any;
+      if (receiptText) {
+        orderWithReceipt.receiptText = receiptText;
+      }
+
+      updated.push(orderWithReceipt);
     } catch (error: any) {
       failed.push({
         id: String(order._id),
