@@ -1,4 +1,4 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Document, Schema, Types, model } from "mongoose";
 
 export type OrderStatus =
   | "OPEN"
@@ -42,6 +42,7 @@ export interface OrderDoc extends Document {
   // Payment information
   paymentMethod?: "cash" | "mobile_banking";
   paymentProofImage?: { url: string; publicId: string };
+  paymentBankName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,6 +95,7 @@ const orderSchema = new Schema<OrderDoc>(
       url: { type: String },
       publicId: { type: String },
     },
+    paymentBankName: { type: String },
     waiterId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     cashierId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     offlineId: String,

@@ -132,6 +132,9 @@ export const updateStatus = async (req: Request, res: Response) => {
       });
     }
 
+    // Extract payment bank name if provided
+    const paymentBankName = req.body.paymentBankName;
+
     // Get payment proof image file if provided (from multer)
     const paymentProofImageFile = req.file;
 
@@ -140,7 +143,8 @@ export const updateStatus = async (req: Request, res: Response) => {
       status,
       req.user._id,
       paymentMethod,
-      paymentProofImageFile
+      paymentProofImageFile,
+      paymentBankName
     );
 
     if (!result) {

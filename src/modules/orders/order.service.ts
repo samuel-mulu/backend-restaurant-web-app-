@@ -439,7 +439,8 @@ export const updateOrderStatus = async (
   status: OrderStatus,
   userId: string,
   paymentMethod?: "cash" | "mobile_banking",
-  paymentProofImageFile?: Express.Multer.File
+  paymentProofImageFile?: Express.Multer.File,
+  paymentBankName?: string
 ): Promise<{ order: OrderDoc; receiptText?: string } | null> => {
   const order = await Order.findById(id);
 
@@ -578,13 +579,14 @@ export const updateOrderStatus = async (
           details: error.message,
         };
       }
-    } else if (paymentMethod === "mobile_banking" && !paymentProofImageFile) {
-      // Require payment proof image for mobile banking
-      throw {
-        status: 400,
-        message: "Payment proof image is required for mobile banking payments",
-      };
-    } else if (paymentMethod === "cash" && order.paymentProofImage) {
+    }
+
+    // Set payment bank name if provided
+    if (paymentBankName) {
+      order.paymentBankName = paymentBankName;
+    }
+
+    if (paymentMethod === "cash" && order.paymentProofImage) {
       // Clear payment proof image for cash payments
       if (order.paymentProofImage.publicId) {
         await deleteImage(order.paymentProofImage.publicId).catch((err) =>
