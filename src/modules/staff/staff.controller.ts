@@ -1,11 +1,7 @@
-import { Request, Response, NextFunction } from "express";
-import * as staffService from "./staff.service";
+import { NextFunction, Request, Response } from "express";
 import { validate } from "../../common/middleware/validate";
-import {
-  createStaffSchema,
-  updateStaffSchema,
-  listStaffSchema,
-} from "./staff.validation";
+import * as staffService from "./staff.service";
+import { createStaffSchema, updateStaffSchema } from "./staff.validation";
 
 export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -30,7 +26,7 @@ export const list = async (req: Request, res: Response, next: NextFunction) => {
 export const getById = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const staff = await staffService.getStaffById(req.params.id);
@@ -75,6 +71,7 @@ export const create = [
           phone: staff.phone,
           role: staff.role,
           salary: staff.salary,
+          color: staff.color,
         },
       });
     } catch (err: any) {
@@ -114,6 +111,7 @@ export const update = [
           phone: staff.phone,
           role: staff.role,
           salary: staff.salary,
+          color: staff.color,
         },
       });
     } catch (err: any) {
@@ -132,7 +130,7 @@ export const update = [
 export const remove = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const staff = await staffService.deleteStaff(req.params.id);
@@ -167,7 +165,7 @@ export const remove = async (
 export const getAttendance = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const attendance = await staffService.getStaffAttendance(req.params.id);

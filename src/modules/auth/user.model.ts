@@ -1,4 +1,4 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Document, Schema, Types, model } from "mongoose";
 import { Role } from "../../constants/roles";
 
 export interface UserDoc extends Document {
@@ -10,6 +10,7 @@ export interface UserDoc extends Document {
   role: Role;
   phone?: string;
   salary?: number;
+  color?: string;
   isDeleted?: boolean;
   deletedAt?: Date;
   clientId?: string;
@@ -41,11 +42,12 @@ const UserSchema = new Schema<UserDoc>(
       index: true,
     },
     salary: { type: Number, min: 0 },
+    color: { type: String, required: false },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: Date,
     clientId: { type: String, sparse: true, unique: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Compound index for efficient queries

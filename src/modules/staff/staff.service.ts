@@ -1,6 +1,6 @@
-import { User, UserDoc } from "../auth/user.model";
 import { hashPassword } from "../../common/utils/password";
 import { Role } from "../../constants/roles";
+import { User, UserDoc } from "../auth/user.model";
 
 export interface CreateStaffInput {
   name: string;
@@ -9,12 +9,14 @@ export interface CreateStaffInput {
   phone?: string;
   role: "cashier" | "waiter" | "staff";
   salary: number;
+  color?: string;
 }
 
 export interface UpdateStaffInput {
   phone?: string;
   salary?: number;
   role?: "cashier" | "waiter" | "staff";
+  color?: string;
 }
 
 export interface ListStaffFilters {
@@ -92,7 +94,7 @@ export const getStaffById = async (id: string): Promise<UserDoc | null> => {
 };
 
 export const createStaff = async (
-  data: CreateStaffInput & { clientId?: string }
+  data: CreateStaffInput & { clientId?: string },
 ): Promise<UserDoc> => {
   // Check for idempotency if clientId provided
   if (data.clientId) {
@@ -168,6 +170,10 @@ export const createStaff = async (
     clientId: data.clientId,
   };
 
+  if (data.color !== undefined) {
+    userData.color = data.color || undefined;
+  }
+
   // Add email if provided
   if (data.email && data.email.trim()) {
     userData.email = data.email.toLowerCase().trim();
@@ -185,7 +191,7 @@ export const createStaff = async (
     // For staff role, generate a random password that won't be used for login
     // This satisfies the required password field in the schema
     userData.password = await hashPassword(
-      `staff_${Date.now()}_${Math.random()}`
+      `staff_${Date.now()}_${Math.random()}`,
     );
   }
 
@@ -196,7 +202,7 @@ export const createStaff = async (
 
 export const updateStaff = async (
   id: string,
-  data: UpdateStaffInput
+  data: UpdateStaffInput,
 ): Promise<UserDoc | null> => {
   const staff = await User.findOne({
     _id: id,
@@ -241,6 +247,10 @@ export const updateStaff = async (
 
   if (data.role) {
     staff.role = data.role;
+  }
+
+  if (data.color !== undefined) {
+    staff.color = data.color || undefined;
   }
 
   await staff.save();
