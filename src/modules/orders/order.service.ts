@@ -73,7 +73,7 @@ export const createOrder = async (
       await existing.populate({
         path: "items.itemId",
         select: "name description price image isAvailable",
-        populate: { path: "category", select: "name" },
+        populate: { path: "category", select: "name", strictPopulate: false },
       });
       await existing.populate("waiterId", "name email phone");
       await existing.populate("cashierId", "name email phone");
@@ -123,6 +123,11 @@ export const createOrder = async (
     0
   );
 
+  // Get inventory item IDs for model mapping
+  const inventoryIds = new Set(
+    inventoryItemsToUpdate.map((it) => it.inventory._id.toString())
+  );
+
   const orderNumber = await generateOrderNumber();
 
   const order = await Order.create({
@@ -130,6 +135,7 @@ export const createOrder = async (
     tableNumber: payload.tableNumber,
     items: payload.items.map((i) => ({
       itemId: new Types.ObjectId(i.itemId) as any,
+      itemModel: inventoryIds.has(i.itemId) ? "Inventory" : "Item",
       qty: i.qty,
       nameSnapshot: i.nameSnapshot,
       priceSnapshot: i.priceSnapshot,
@@ -154,7 +160,7 @@ export const createOrder = async (
   await order.populate({
     path: "items.itemId",
     select: "name description price image isAvailable",
-    populate: { path: "category", select: "name" },
+    populate: { path: "category", select: "name", strictPopulate: false },
   });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -224,7 +230,7 @@ export const listOrders = async (
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
-      populate: { path: "category", select: "name" },
+      populate: { path: "category", select: "name", strictPopulate: false },
     })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone")
@@ -339,7 +345,7 @@ export const getOwnerOrders = async (
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
-      populate: { path: "category", select: "name" },
+      populate: { path: "category", select: "name", strictPopulate: false },
     })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone")
@@ -412,7 +418,7 @@ export const getOrder = async (id: string): Promise<OrderDoc | null> => {
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
-      populate: { path: "category", select: "name" },
+      populate: { path: "category", select: "name", strictPopulate: false },
     })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone")
@@ -543,6 +549,9 @@ export const updateOrderStatus = async (
   // Handle payment method and proof image for PAID_TO_CASHIER status
   if (status === "PAID_TO_CASHIER") {
     order.paymentReceivedAt = now;
+    if (user.role === "cashier" && !order.cashierId) {
+      order.cashierId = userIdObjectId as any;
+    }
 
     // Set payment method (default to cash if not provided)
     if (paymentMethod) {
@@ -603,6 +612,9 @@ export const updateOrderStatus = async (
   } else if (status === "TRANSFERRED_TO_OWNER") {
     order.paymentDeliveredAt = now;
     order.transferredToOwnerBy = userIdObjectId as any;
+    if (user.role === "cashier" && !order.cashierId) {
+      order.cashierId = userIdObjectId as any;
+    }
   } else if (status === "OWNER_CONFIRMED") {
     order.completedAt = now;
     order.confirmedBy = userIdObjectId as any;
@@ -784,9 +796,15 @@ export const bulkUpdateOrderStatus = async (
         order.cancelledBy = userIdObjectId as any;
       } else if (newStatus === "PAID_TO_CASHIER") {
         order.paymentReceivedAt = now;
+        if (user.role === "cashier" && !order.cashierId) {
+          order.cashierId = userIdObjectId as any;
+        }
       } else if (newStatus === "TRANSFERRED_TO_OWNER") {
         order.paymentDeliveredAt = now;
         order.transferredToOwnerBy = userIdObjectId as any;
+        if (user.role === "cashier" && !order.cashierId) {
+          order.cashierId = userIdObjectId as any;
+        }
       } else if (newStatus === "OWNER_CONFIRMED") {
         order.completedAt = now;
         order.confirmedBy = userIdObjectId as any;
@@ -870,8 +888,78 @@ export const updateOrder = async (
 
   // Update items if provided
   if (data.items) {
-    order.items = data.items.map((i) => ({
+    const oldItems = order.items;
+    const newItemsInput = data.items;
+
+    // Track original quantities for inventory items in this order
+    const oldInventoryQtys = new Map<string, number>();
+    oldItems.forEach((item) => {
+      if (item.itemModel === "Inventory") {
+        const id = item.itemId.toString();
+        oldInventoryQtys.set(id, (oldInventoryQtys.get(id) || 0) + item.qty);
+      }
+    });
+
+    // Check which of the provided items are inventory items
+    const inventoryItems = await Inventory.find({
+      _id: { $in: newItemsInput.map((i) => i.itemId) },
+    });
+    const inventoryMap = new Map<string, any>();
+    inventoryItems.forEach((inv) => inventoryMap.set(inv._id.toString(), inv));
+
+    // Calculate requested new quantities for inventory items
+    const newInventoryQtys = new Map<string, number>();
+    newItemsInput.forEach((item) => {
+      if (inventoryMap.has(item.itemId)) {
+        newInventoryQtys.set(
+          item.itemId,
+          (newInventoryQtys.get(item.itemId) || 0) + item.qty
+        );
+      }
+    });
+
+    // Validate stock and prepare adjustments
+    const allInventoryIds = new Set([
+      ...oldInventoryQtys.keys(),
+      ...newInventoryQtys.keys(),
+    ]);
+
+    for (const itemId of allInventoryIds) {
+      const oldQty = oldInventoryQtys.get(itemId) || 0;
+      const newQty = newInventoryQtys.get(itemId) || 0;
+      const delta = newQty - oldQty; // Positive means we need more stock than we currently have in this order
+
+      if (delta > 0) {
+        const inv = inventoryMap.get(itemId);
+        if (!inv || inv.quantity < delta) {
+          throw {
+            status: 400,
+            message: `Insufficient quantity for ${
+              inv?.name || "Inventory Item"
+            }. Available: ${inv?.quantity || 0}, Additional requested: ${delta}`,
+          };
+        }
+      }
+    }
+
+    // Apply adjustments to Inventory stock
+    for (const itemId of allInventoryIds) {
+      const oldQty = oldInventoryQtys.get(itemId) || 0;
+      const newQty = newInventoryQtys.get(itemId) || 0;
+      const delta = newQty - oldQty;
+
+      if (delta !== 0) {
+        // If delta > 0, we decrease stock. If delta < 0, we increase stock (release).
+        await Inventory.findByIdAndUpdate(itemId, {
+          $inc: { quantity: -delta },
+        });
+      }
+    }
+
+    // Set updated items on order
+    order.items = newItemsInput.map((i) => ({
       itemId: new Types.ObjectId(i.itemId) as any,
+      itemModel: (inventoryMap.has(i.itemId) ? "Inventory" : "Item") as "Item" | "Inventory",
       qty: i.qty,
       nameSnapshot: i.nameSnapshot,
       priceSnapshot: i.priceSnapshot,
@@ -894,7 +982,7 @@ export const updateOrder = async (
   await order.populate({
     path: "items.itemId",
     select: "name description price image isAvailable",
-    populate: { path: "category", select: "name" },
+    populate: { path: "category", select: "name", strictPopulate: false },
   });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -911,7 +999,7 @@ export const getOrdersByWaiter = async (
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
-      populate: { path: "category", select: "name" },
+      populate: { path: "category", select: "name", strictPopulate: false },
     })
     .populate("cashierId", "name email phone")
     .populate("cancelledBy", "name email phone")
@@ -967,7 +1055,7 @@ export const getOrdersByCashier = async (
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
-      populate: { path: "category", select: "name" },
+      populate: { path: "category", select: "name", strictPopulate: false },
     })
     .populate("waiterId", "name email phone")
     .populate("cancelledBy", "name email phone")
@@ -981,7 +1069,7 @@ export const markOrderAsPrinted = async (id: string) => {
     .populate({
       path: "items.itemId",
       select: "name description price image isAvailable",
-      populate: { path: "category", select: "name" },
+      populate: { path: "category", select: "name", strictPopulate: false },
     })
     .populate("waiterId", "name email phone")
     .populate("cashierId", "name email phone");
@@ -1005,7 +1093,7 @@ export async function printOrder(orderId: string): Promise<{ order: OrderDoc; re
   await order.populate({
     path: "items.itemId",
     select: "name description price image isAvailable",
-    populate: { path: "category", select: "name" },
+    populate: { path: "category", select: "name", strictPopulate: false },
   });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
@@ -1070,7 +1158,7 @@ export const cancelOrder = async (
   await order.populate({
     path: "items.itemId",
     select: "name description price image isAvailable",
-    populate: { path: "category", select: "name" },
+    populate: { path: "category", select: "name", strictPopulate: false },
   });
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");

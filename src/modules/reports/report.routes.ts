@@ -9,5 +9,6 @@ router.use(requireRole("owner"));
 
 router.get("/daily", reportController.getDailyReport);
 router.get("/monthly", reportController.getMonthlyReport);
+router.get("/staff-orders", reportController.getStaffOrderDetails);
 
 export default router;

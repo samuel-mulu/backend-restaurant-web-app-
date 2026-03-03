@@ -8,8 +8,9 @@ export type OrderStatus =
   | "OWNER_CONFIRMED"
   | "DISPUTED";
 
-interface OrderItem {
+export interface OrderItem {
   itemId: Schema.Types.ObjectId;
+  itemModel: "Item" | "Inventory";
   nameSnapshot: string;
   priceSnapshot: number;
   qty: number;
@@ -53,7 +54,17 @@ const orderSchema = new Schema<OrderDoc>(
     tableNumber: { type: String, required: false },
     items: [
       {
-        itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+        itemId: {
+          type: Schema.Types.ObjectId,
+          refPath: "items.itemModel",
+          required: true,
+        },
+        itemModel: {
+          type: String,
+          required: true,
+          enum: ["Item", "Inventory"],
+          default: "Item",
+        },
         nameSnapshot: { type: String, required: true },
         priceSnapshot: { type: Number, required: true, min: 0 },
         qty: { type: Number, required: true, min: 1 },
