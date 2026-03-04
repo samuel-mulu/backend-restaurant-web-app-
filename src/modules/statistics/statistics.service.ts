@@ -1,8 +1,7 @@
-import { Order } from "../orders/order.model";
+import { Types } from "mongoose";
 import { User } from "../auth/user.model";
 import { Inventory } from "../inventory/inventory.model";
-import { Item } from "../items/item.model";
-import { Types } from "mongoose";
+import { Order } from "../orders/order.model";
 
 export interface DateRange {
   startDate?: Date;
@@ -346,6 +345,7 @@ export interface ProductAnalyticsFilters {
   startDate?: Date;
   endDate?: Date;
   limit?: number;
+  status?: string;
 }
 
 export interface ProductAnalytics {
@@ -378,9 +378,13 @@ export interface ProductAnalytics {
 export const getProductAnalytics = async (
   filters: ProductAnalyticsFilters = {}
 ): Promise<ProductAnalytics> => {
-  const matchQuery: any = {
-    status: { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED"] },
-  };
+  const matchQuery: any = {};
+
+  if (filters.status && filters.status !== "ALL") {
+    matchQuery.status = filters.status;
+  } else {
+    matchQuery.status = { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED", "TRANSFERRED_TO_OWNER"] };
+  }
 
   if (filters.startDate || filters.endDate) {
     matchQuery.createdAt = {};
@@ -398,6 +402,7 @@ export const getProductAnalytics = async (
   const bestSellingItems = await Order.aggregate([
     { $match: matchQuery },
     { $unwind: "$items" },
+    { $match: { "items.itemModel": "Item" } },
     {
       $group: {
         _id: "$items.itemId",
@@ -425,6 +430,7 @@ export const getProductAnalytics = async (
   const revenueByProduct = await Order.aggregate([
     { $match: matchQuery },
     { $unwind: "$items" },
+    { $match: { "items.itemModel": "Item" } },
     {
       $group: {
         _id: "$items.itemId",
@@ -450,6 +456,7 @@ export const getProductAnalytics = async (
   const productPerformance = await Order.aggregate([
     { $match: matchQuery },
     { $unwind: "$items" },
+    { $match: { "items.itemModel": "Item" } },
     {
       $group: {
         _id: {
@@ -672,6 +679,7 @@ export const getStaffPerformance = async (
 export interface InventoryAnalyticsFilters {
   startDate?: Date;
   endDate?: Date;
+  status?: string;
 }
 
 export interface InventoryAnalytics {
@@ -700,7 +708,21 @@ export interface InventoryAnalytics {
 export const getInventoryAnalytics = async (
   filters: InventoryAnalyticsFilters = {}
 ): Promise<InventoryAnalytics> => {
-  // Stock levels over time (simplified - would need historical tracking for accurate data)
+  const matchQuery: any = {};
+
+  if (filters.status && filters.status !== "ALL") {
+    matchQuery.status = filters.status;
+  } else {
+    matchQuery.status = { $in: ["PAID_TO_CASHIER", "OWNER_CONFIRMED", "TRANSFERRED_TO_OWNER"] };
+  }
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) matchQuery.createdAt.$gte = filters.startDate;
+    if (filters.endDate) matchQuery.createdAt.$lte = filters.endDate;
+  }
+
+  // Stock levels over time (simplified)
   const stockLevels = await Inventory.aggregate([
     {
       $project: {
@@ -726,17 +748,35 @@ export const getInventoryAnalytics = async (
       unit: inv.unit,
     }));
 
-  // Top selling inventory (by quantity - for now, we'll use current quantity as a proxy)
-  // In a real system, you'd track consumption through orders
-  const topSelling = allInventory
-    .map((inv) => ({
-      inventoryId: inv._id.toString(),
-      inventoryName: inv.name,
-      quantity: inv.quantity,
-      value: inv.quantity * inv.price,
-    }))
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 10);
+  // Actual sales/consumption performance from Orders
+  const topSellingAggregate = await Order.aggregate([
+    { $match: matchQuery },
+    { $unwind: "$items" },
+    { $match: { "items.itemModel": { $in: ["Inventory", "Item"] } } },
+    {
+      $group: {
+        _id: "$items.itemId",
+        itemName: { $first: "$items.nameSnapshot" },
+        quantity: { $sum: "$items.qty" },
+        value: { $sum: { $multiply: ["$items.priceSnapshot", "$items.qty"] } },
+      },
+    },
+    { $sort: { quantity: -1 } },
+    { $limit: 20 },
+    {
+      $project: {
+        inventoryId: { $toString: "$_id" },
+        inventoryName: "$itemName",
+        quantity: 1,
+        value: 1,
+        _id: 0,
+      },
+    },
+  ]);
+
+  // We could filter here to only include actual inventory items by joining,
+  // but for now let's just use the aggregate results which better reflect "Performance"
+  const topSelling = topSellingAggregate;
 
   // Total inventory value
   const inventoryValue = allInventory.reduce(
@@ -884,6 +924,7 @@ export const getOrderAnalytics = async (
 export interface ComprehensiveAnalyticsFilters {
   startDate?: Date;
   endDate?: Date;
+  status?: string;
 }
 
 export interface TableAnalytics {
@@ -1276,10 +1317,12 @@ export const getComprehensiveAnalytics = async (
     getInventoryAnalytics({
       startDate: filters.startDate,
       endDate: filters.endDate,
+      status: filters.status,
     }),
     getProductAnalytics({
       startDate: filters.startDate,
       endDate: filters.endDate,
+      status: filters.status,
     }),
     getOrderAnalytics({
       startDate: filters.startDate,

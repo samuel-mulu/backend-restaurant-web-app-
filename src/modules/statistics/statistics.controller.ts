@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import { NextFunction, Request, Response } from "express";
 import * as statisticsService from "./statistics.service";
 
 export const getDashboard = async (
@@ -38,7 +38,11 @@ export const getSales = async (
         ? new Date(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
+        ? (() => {
+            const d = new Date(req.query.endDate as string);
+            d.setHours(23, 59, 59, 999);
+            return d;
+          })()
         : undefined,
       cashierId: req.query.cashierId as string,
     };
@@ -65,11 +69,16 @@ export const getProducts = async (
         ? new Date(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
+        ? (() => {
+            const d = new Date(req.query.endDate as string);
+            d.setHours(23, 59, 59, 999);
+            return d;
+          })()
         : undefined,
       limit: req.query.limit
         ? parseInt(req.query.limit as string)
         : undefined,
+      status: req.query.status as string,
     };
 
     const analytics = await statisticsService.getProductAnalytics(filters);
@@ -94,7 +103,11 @@ export const getStaff = async (
         ? new Date(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
+        ? (() => {
+            const d = new Date(req.query.endDate as string);
+            d.setHours(23, 59, 59, 999);
+            return d;
+          })()
         : undefined,
     };
 
@@ -120,8 +133,13 @@ export const getInventory = async (
         ? new Date(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
+        ? (() => {
+            const d = new Date(req.query.endDate as string);
+            d.setHours(23, 59, 59, 999);
+            return d;
+          })()
         : undefined,
+      status: req.query.status as string,
     };
 
     const analytics = await statisticsService.getInventoryAnalytics(filters);
@@ -143,11 +161,20 @@ export const getComprehensive = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? (() => {
+            const d = new Date(req.query.startDate as string);
+            d.setHours(0, 0, 0, 0);
+            return d;
+          })()
         : undefined,
       endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
+        ? (() => {
+            const d = new Date(req.query.endDate as string);
+            d.setHours(23, 59, 59, 999);
+            return d;
+          })()
         : undefined,
+      status: req.query.status as string,
     };
 
     const analytics = await statisticsService.getComprehensiveAnalytics(filters);

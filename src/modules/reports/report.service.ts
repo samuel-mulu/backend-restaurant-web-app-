@@ -114,6 +114,7 @@ export const getReportData = async (
                   total: 1,
                 },
               },
+              { $sort: { count: -1 } },
             ],
             byCashier: [
               {
@@ -146,6 +147,7 @@ export const getReportData = async (
                   total: 1,
                 },
               },
+              { $sort: { count: -1 } },
             ],
           },
         },
