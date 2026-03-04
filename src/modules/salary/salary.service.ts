@@ -1,31 +1,31 @@
 import { Types } from "mongoose";
-import { Salary, SalaryDoc } from "./salary.model";
-import { User } from "../auth/user.model";
-import { Withdrawal, WithdrawalDoc } from "./withdrawal.model";
-import { Payment, PaymentDoc } from "./payment.model";
 import {
-  gregorianToEthiopian,
-  ethiopianToGregorian,
-  formatEthiopianDate,
-  parseEthiopianDate,
-  getCurrentEthiopianDate,
-  addEthiopianMonths,
-  daysBetweenEthiopianDates,
-  type EthiopianDate,
+    addEthiopianMonths,
+    ethiopianToGregorian,
+    formatEthiopianDate,
+    getCurrentEthiopianDate,
+    gregorianToEthiopian,
+    parseEthiopianDate,
+    type EthiopianDate
 } from "../../common/utils/ethiopianCalendar";
+import { User } from "../auth/user.model";
+import { Payment, PaymentDoc } from "./payment.model";
+import { Salary, SalaryDoc } from "./salary.model";
+import { Withdrawal, WithdrawalDoc } from "./withdrawal.model";
 
 export interface CreateSalaryInput {
   staffId: string;
   amount: number;
   month?: string; // YYYY-MM (Gregorian) - auto-calculated
   year?: number; // Gregorian year - auto-calculated
+  paymentDate?: string | Date; // Gregorian payment date
   status?: "pending" | "paid";
   remarks?: string;
   clientId?: string; // For offline sync idempotency
 
-  // Ethiopian calendar fields
-  registeredDate: string; // YYYY-MM-DD (Ethiopian) - required
-  paymentDate: string; // YYYY-MM-DD (Ethiopian) - required (payment due date)
+  // Ethiopian calendar fields (optional)
+  registeredDate?: string; // YYYY-MM-DD (Ethiopian)
+  ethiopianPaymentDate?: string; // YYYY-MM-DD (Ethiopian)
   salaryPeriod?: "monthly" | "per_month";
 }
 
@@ -149,31 +149,44 @@ export const createSalary = async (
     throw { status: 404, message: "Staff member not found" };
   }
 
-  // Validate and parse Ethiopian dates
-  if (!data.registeredDate || typeof data.registeredDate !== "string") {
-    throw {
-      status: 400,
-      message:
-        "Registered date is required and must be a string (YYYY-MM-DD format)",
-    };
+  // Handle dates: prioritize Gregorian if provided, otherwise parse Ethiopian
+  let registeredEthDate: EthiopianDate;
+  let paymentEthDate: EthiopianDate;
+  let gregorianPaymentDate: Date;
+
+  if (data.paymentDate && (typeof data.paymentDate === "object" || !/^\d{4}-\d{2}-\d{2}$/.test(data.paymentDate as string))) {
+    // Standard JS Date or ISO string
+    gregorianPaymentDate = new Date(data.paymentDate);
+    paymentEthDate = gregorianToEthiopian(gregorianPaymentDate);
+  } else if (typeof data.paymentDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.paymentDate)) {
+    // Check if it's actually an Ethiopian format YYYY-MM-DD being passed in paymentDate
+    // This is for backward compatibility or if the field is misused
+    try {
+      paymentEthDate = parseEthiopianDate(data.paymentDate);
+      gregorianPaymentDate = ethiopianToGregorian(paymentEthDate);
+    } catch {
+      // Fallback to Gregorian
+      gregorianPaymentDate = new Date(data.paymentDate);
+      paymentEthDate = gregorianToEthiopian(gregorianPaymentDate);
+    }
+  } else if ((data as any).ethiopianPaymentDate) {
+    paymentEthDate = parseEthiopianDate((data as any).ethiopianPaymentDate);
+    gregorianPaymentDate = ethiopianToGregorian(paymentEthDate);
+  } else {
+    // Default to 1 month from now
+    const now = new Date();
+    const future = new Date();
+    future.setMonth(now.getMonth() + 1);
+    gregorianPaymentDate = future;
+    paymentEthDate = gregorianToEthiopian(gregorianPaymentDate);
   }
 
-  // Support both paymentDate and ethiopianPaymentDate for backward compatibility
-  const paymentDateValue =
-    data.paymentDate || (data as any).ethiopianPaymentDate;
-  if (!paymentDateValue || typeof paymentDateValue !== "string") {
-    throw {
-      status: 400,
-      message:
-        "Payment date is required and must be a string (YYYY-MM-DD format)",
-    };
+  if (data.registeredDate) {
+    registeredEthDate = parseEthiopianDate(data.registeredDate);
+  } else {
+    // Default to now
+    registeredEthDate = getCurrentEthiopianDate();
   }
-
-  const registeredEthDate = parseEthiopianDate(data.registeredDate);
-  const paymentEthDate = parseEthiopianDate(paymentDateValue);
-
-  // Convert payment date to Gregorian for storage
-  const gregorianPaymentDate = ethiopianToGregorian(paymentEthDate);
 
   const gregorianMonth = `${gregorianPaymentDate.getFullYear()}-${String(
     gregorianPaymentDate.getMonth() + 1
@@ -710,103 +723,33 @@ export const calculateCountdown = async (salaryId: string) => {
     throw { status: 404, message: "Salary record not found" };
   }
 
-  if (!salary.registeredDate) {
-    throw {
-      status: 400,
-      message: "Salary record must have registered date",
-    };
+  // Get current Gregorian date
+  const now = new Date();
+  
+  // Use Gregorian payment date as primary if possible
+  const paymentDateGreg = salary.paymentDate;
+  
+  // Calculate daysUntil using Gregorian dates
+  const diffMs = paymentDateGreg.getTime() - now.getTime();
+  const daysUntil = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+  // Use Gregorian for primary countdown
+  const nextPaymentGregorian = new Date(salary.paymentDate);
+  if (now > nextPaymentGregorian && salary.status === "pending") {
+    // If due date passed, rollover or show 0
+    // Actually, autoRollover is called below
   }
 
-  // Parse Ethiopian dates
-  const registeredDate = parseEthiopianDate(salary.registeredDate);
-
-  if (!salary.ethiopianPaymentDate) {
-    throw {
-      status: 400,
-      message: "Salary record must have payment date",
-    };
-  }
-
-  const paymentDate = parseEthiopianDate(salary.ethiopianPaymentDate);
-
-  // Get current Ethiopian date
+  // Fallback to Ethiopian for backward compatibility if needed, 
+  // but prioritize Gregorian for logic.
+  const registeredDateEth = salary.registeredDate ? parseEthiopianDate(salary.registeredDate) : gregorianToEthiopian(salary.createdAt || new Date());
+  const paymentDateEth = salary.ethiopianPaymentDate ? parseEthiopianDate(salary.ethiopianPaymentDate) : gregorianToEthiopian(salary.paymentDate);
   const currentEthDate = getCurrentEthiopianDate();
 
-  // Calculate countdown based on month/day only (ignore year)
-  // Compare current month/day with payment month/day
-  let daysUntil = 0;
-
-  // If current month/day is before payment month/day in the same year cycle
-  if (
-    currentEthDate.month < paymentDate.month ||
-    (currentEthDate.month === paymentDate.month &&
-      currentEthDate.day < paymentDate.day)
-  ) {
-    // Payment is in current year cycle
-    const paymentThisYear: EthiopianDate = {
-      year: currentEthDate.year,
-      month: paymentDate.month,
-      day: paymentDate.day,
-    };
-    const currentGreg = ethiopianToGregorian(currentEthDate);
-    const paymentGreg = ethiopianToGregorian(paymentThisYear);
-    const diffMs = paymentGreg.getTime() - currentGreg.getTime();
-    daysUntil = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-  } else {
-    // Payment is in next year cycle
-    const paymentNextYear: EthiopianDate = {
-      year: currentEthDate.year + 1,
-      month: paymentDate.month,
-      day: paymentDate.day,
-    };
-    const currentGreg = ethiopianToGregorian(currentEthDate);
-    const paymentGreg = ethiopianToGregorian(paymentNextYear);
-    const diffMs = paymentGreg.getTime() - currentGreg.getTime();
-    daysUntil = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-  }
-
-  // Calculate total days between registered and payment (month/day based)
-  const registeredThisYear: EthiopianDate = {
-    year: currentEthDate.year,
-    month: registeredDate.month,
-    day: registeredDate.day,
-  };
-  const paymentThisYear: EthiopianDate = {
-    year: currentEthDate.year,
-    month: paymentDate.month,
-    day: paymentDate.day,
-  };
-
-  // If payment month/day is before registered month/day, it's in next year
-  let totalDays = 0;
-  if (
-    paymentDate.month < registeredDate.month ||
-    (paymentDate.month === registeredDate.month &&
-      paymentDate.day < registeredDate.day)
-  ) {
-    const paymentNextYear: EthiopianDate = {
-      year: currentEthDate.year + 1,
-      month: paymentDate.month,
-      day: paymentDate.day,
-    };
-    totalDays = daysBetweenEthiopianDates(registeredThisYear, paymentNextYear);
-  } else {
-    totalDays = daysBetweenEthiopianDates(registeredThisYear, paymentThisYear);
-  }
-
-  // Use payment date for next payment date display
-  const nextPaymentEthiopian: EthiopianDate = {
-    year:
-      currentEthDate.year +
-      (paymentDate.month < currentEthDate.month ||
-      (paymentDate.month === currentEthDate.month &&
-        paymentDate.day < currentEthDate.day)
-        ? 1
-        : 0),
-    month: paymentDate.month,
-    day: paymentDate.day,
-  };
-  const nextPaymentGregorian = ethiopianToGregorian(nextPaymentEthiopian);
+  // Calculate totalDays between registered and payment (Gregorian based)
+  const registeredGregorian = salary.createdAt || new Date();
+  const totalDaysDiffMs = nextPaymentGregorian.getTime() - registeredGregorian.getTime();
+  const totalDays = Math.max(1, Math.ceil(totalDaysDiffMs / (1000 * 60 * 60 * 24)));
 
   // Auto-create payment if countdown reached 0 and status is pending
   if (daysUntil === 0 && salary.status === "pending") {
@@ -814,99 +757,40 @@ export const calculateCountdown = async (salaryId: string) => {
   }
 
   // Auto-rollover dates if payment date has passed and status is pending
-  if (salary.status === "pending") {
+  if (salary.status === "pending" && now > nextPaymentGregorian) {
     await autoRolloverToNextMonth(salaryId);
 
     // Reload salary to get updated dates if rollover occurred
     const updatedSalary = await Salary.findById(salaryId);
-    if (
-      updatedSalary &&
-      updatedSalary.ethiopianPaymentDate &&
-      updatedSalary.ethiopianPaymentDate !== salary.ethiopianPaymentDate
-    ) {
-      // Recalculate with updated dates
-      const updatedPaymentDateStr = updatedSalary.ethiopianPaymentDate;
-      const updatedPaymentDate = parseEthiopianDate(updatedPaymentDateStr);
-      const updatedCurrentEthDate = getCurrentEthiopianDate();
-
-      // Recalculate daysUntil with updated payment date
-      if (
-        updatedCurrentEthDate.month < updatedPaymentDate.month ||
-        (updatedCurrentEthDate.month === updatedPaymentDate.month &&
-          updatedCurrentEthDate.day < updatedPaymentDate.day)
-      ) {
-        const updatedPaymentThisYear: EthiopianDate = {
-          year: updatedCurrentEthDate.year,
-          month: updatedPaymentDate.month,
-          day: updatedPaymentDate.day,
-        };
-        const updatedCurrentGreg = ethiopianToGregorian(updatedCurrentEthDate);
-        const updatedPaymentGreg = ethiopianToGregorian(updatedPaymentThisYear);
-        const updatedDiffMs =
-          updatedPaymentGreg.getTime() - updatedCurrentGreg.getTime();
-        daysUntil = Math.max(
-          0,
-          Math.floor(updatedDiffMs / (1000 * 60 * 60 * 24))
-        );
-      } else {
-        const updatedPaymentNextYear: EthiopianDate = {
-          year: updatedCurrentEthDate.year + 1,
-          month: updatedPaymentDate.month,
-          day: updatedPaymentDate.day,
-        };
-        const updatedCurrentGreg = ethiopianToGregorian(updatedCurrentEthDate);
-        const updatedPaymentGreg = ethiopianToGregorian(updatedPaymentNextYear);
-        const updatedDiffMs =
-          updatedPaymentGreg.getTime() - updatedCurrentGreg.getTime();
-        daysUntil = Math.max(
-          0,
-          Math.floor(updatedDiffMs / (1000 * 60 * 60 * 24))
-        );
-      }
-
-      // Update nextPaymentEthiopian with new payment date
-      const updatedNextPaymentEthiopian: EthiopianDate = {
-        year:
-          updatedCurrentEthDate.year +
-          (updatedPaymentDate.month < updatedCurrentEthDate.month ||
-          (updatedPaymentDate.month === updatedCurrentEthDate.month &&
-            updatedPaymentDate.day < updatedCurrentEthDate.day)
-            ? 1
-            : 0),
-        month: updatedPaymentDate.month,
-        day: updatedPaymentDate.day,
-      };
-      const updatedNextPaymentGregorian = ethiopianToGregorian(
-        updatedNextPaymentEthiopian
-      );
+    if (updatedSalary && updatedSalary.paymentDate.getTime() !== salary.paymentDate.getTime()) {
+      const updatedDiffMs = updatedSalary.paymentDate.getTime() - now.getTime();
+      const updatedDaysUntil = Math.max(0, Math.ceil(updatedDiffMs / (1000 * 60 * 60 * 24)));
+      
+      const updatedTotalDaysDiffMs = updatedSalary.paymentDate.getTime() - (updatedSalary.createdAt || new Date()).getTime();
+      const updatedTotalDays = Math.max(1, Math.ceil(updatedTotalDaysDiffMs / (1000 * 60 * 60 * 24)));
 
       return {
-        daysUntil,
-        totalDays: totalDays || 30,
+        daysUntil: updatedDaysUntil,
+        totalDays: updatedTotalDays,
         nextPaymentDate: {
-          ethiopian: formatEthiopianDate(updatedNextPaymentEthiopian),
-          gregorian: updatedNextPaymentGregorian.toISOString(),
+          ethiopian: updatedSalary.ethiopianPaymentDate || "",
+          gregorian: updatedSalary.paymentDate.toISOString(),
         },
-        registeredDate:
-          updatedSalary.registeredDate || salary.registeredDate || "",
-        registeredDateGregorian: ethiopianToGregorian(
-          updatedSalary.registeredDate
-            ? parseEthiopianDate(updatedSalary.registeredDate)
-            : registeredDate
-        ).toISOString(),
+        registeredDate: updatedSalary.registeredDate || "",
+        registeredDateGregorian: (updatedSalary.createdAt || new Date()).toISOString(),
       };
     }
   }
 
   return {
     daysUntil,
-    totalDays: totalDays || 30, // Total countdown period (month/day based)
+    totalDays, 
     nextPaymentDate: {
-      ethiopian: formatEthiopianDate(nextPaymentEthiopian),
+      ethiopian: salary.ethiopianPaymentDate || "",
       gregorian: nextPaymentGregorian.toISOString(),
     },
-    registeredDate: salary.registeredDate,
-    registeredDateGregorian: ethiopianToGregorian(registeredDate).toISOString(),
+    registeredDate: salary.registeredDate || "",
+    registeredDateGregorian: (salary.createdAt || new Date()).toISOString(),
   };
 };
 
