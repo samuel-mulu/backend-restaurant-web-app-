@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { formatReceipt } from "../../common/utils/receiptFormatter";
+import { formatMergedReceipt, formatReceipt } from "../../common/utils/receiptFormatter";
 import { deleteImage, uploadImage } from "../../config/cloudinary";
 import {
     notifyCashiersNewOrder,
@@ -656,6 +656,7 @@ export const bulkUpdateOrderStatus = async (
 ): Promise<{
   updated: Array<OrderDoc & { receiptText?: string }>;
   failed: Array<{ id: string; reason: string }>;
+  mergedReceiptText?: string;
 }> => {
   if (!orderIds || orderIds.length === 0) {
     throw { status: 400, message: "Order IDs are required" };
@@ -849,7 +850,14 @@ export const bulkUpdateOrderStatus = async (
     }
   }
 
-  return { updated, failed };
+  let mergedReceiptText: string | undefined;
+
+  // Generate merged receipt if updating to PAID_TO_CASHIER and there's more than one successful update
+  if (newStatus === "PAID_TO_CASHIER" && updated.length > 1) {
+    mergedReceiptText = formatMergedReceipt(updated);
+  }
+
+  return { updated, failed, mergedReceiptText };
 };
 
 export interface UpdateOrderInput {

@@ -189,6 +189,7 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       success: true,
       updated: result.updated,
       failed: result.failed,
+      mergedReceiptText: result.mergedReceiptText,
       message: `Updated ${result.updated.length} order(s)${
         result.failed.length > 0 ? `, ${result.failed.length} failed` : ""
       }`,
