@@ -375,6 +375,120 @@ export interface ProductAnalytics {
   }>;
 }
 
+export interface SoldItemsPerformanceFilters {
+  startDate?: Date;
+  endDate?: Date;
+  status?: string;
+  paymentMethod?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface SoldItemPerformanceRow {
+  itemId: string;
+  itemName: string;
+  itemType: "menu" | "inventory";
+  qtySold: number;
+  salesAmount: number;
+}
+
+export interface SoldItemsPerformanceResponse {
+  items: SoldItemPerformanceRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+}
+
+export const getSoldItemsPerformance = async (
+  filters: SoldItemsPerformanceFilters = {}
+): Promise<SoldItemsPerformanceResponse> => {
+  const page = Math.max(1, filters.page || 1);
+  const limit = Math.max(1, Math.min(filters.limit || 20, 200));
+  const skip = (page - 1) * limit;
+
+  const matchQuery: any = {};
+
+  if (filters.status && filters.status !== "ALL") {
+    matchQuery.status = filters.status;
+  }
+
+  if (filters.startDate || filters.endDate) {
+    matchQuery.createdAt = {};
+    if (filters.startDate) matchQuery.createdAt.$gte = filters.startDate;
+    if (filters.endDate) matchQuery.createdAt.$lte = filters.endDate;
+  }
+
+  if (filters.paymentMethod && filters.paymentMethod !== "ALL") {
+    if (filters.paymentMethod === "unpaid") {
+      matchQuery.$or = [
+        { paymentMethod: { $exists: false } },
+        { paymentMethod: null },
+        { paymentMethod: "" },
+      ];
+    } else {
+      matchQuery.paymentMethod = filters.paymentMethod;
+    }
+  }
+
+  const aggregateResult = await Order.aggregate([
+    { $match: matchQuery },
+    { $unwind: "$items" },
+    {
+      $group: {
+        _id: {
+          itemId: "$items.itemId",
+          itemModel: "$items.itemModel",
+          itemName: "$items.nameSnapshot",
+        },
+        qtySold: { $sum: "$items.qty" },
+        salesAmount: {
+          $sum: { $multiply: ["$items.priceSnapshot", "$items.qty"] },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        itemId: { $toString: "$_id.itemId" },
+        itemName: { $ifNull: ["$_id.itemName", "Unknown Item"] },
+        itemType: {
+          $cond: [{ $eq: ["$_id.itemModel", "Inventory"] }, "inventory", "menu"],
+        },
+        qtySold: 1,
+        salesAmount: 1,
+      },
+    },
+    { $sort: { qtySold: -1, salesAmount: -1, itemName: 1 } },
+    {
+      $facet: {
+        items: [{ $skip: skip }, { $limit: limit }],
+        totalCount: [{ $count: "count" }],
+      },
+    },
+  ]);
+
+  const result = aggregateResult[0] || { items: [], totalCount: [] };
+  const total = result.totalCount?.[0]?.count || 0;
+  const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+  return {
+    items: result.items || [],
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNextPage: totalPages > 0 && page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
+
 export const getProductAnalytics = async (
   filters: ProductAnalyticsFilters = {}
 ): Promise<ProductAnalytics> => {

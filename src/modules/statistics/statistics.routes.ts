@@ -14,6 +14,7 @@ router.use(requireOwner);
 router.get("/dashboard", statisticsCtrl.getDashboard);
 router.get("/sales", statisticsCtrl.getSales);
 router.get("/products", statisticsCtrl.getProducts);
+router.get("/item-performance", statisticsCtrl.getItemPerformance);
 router.get("/staff", statisticsCtrl.getStaff);
 router.get("/inventory", statisticsCtrl.getInventory);
 router.get("/comprehensive", statisticsCtrl.getComprehensive);

@@ -92,6 +92,40 @@ export const getProducts = async (
   }
 };
 
+export const getItemPerformance = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const filters = {
+      startDate: req.query.startDate
+        ? new Date(req.query.startDate as string)
+        : undefined,
+      endDate: req.query.endDate
+        ? (() => {
+            const d = new Date(req.query.endDate as string);
+            d.setHours(23, 59, 59, 999);
+            return d;
+          })()
+        : undefined,
+      status: req.query.status as string,
+      paymentMethod: req.query.paymentMethod as string,
+      page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
+      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
+    };
+
+    const data = await statisticsService.getSoldItemsPerformance(filters);
+
+    res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getStaff = async (
   req: Request,
   res: Response,
