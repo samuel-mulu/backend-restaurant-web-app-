@@ -111,6 +111,7 @@ export const getItemPerformance = async (
         : undefined,
       status: req.query.status as string,
       paymentMethod: req.query.paymentMethod as string,
+      itemType: req.query.itemType as "menu" | "inventory" | "ALL",
       page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
       limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 20,
     };

@@ -380,6 +380,7 @@ export interface SoldItemsPerformanceFilters {
   endDate?: Date;
   status?: string;
   paymentMethod?: string;
+  itemType?: "menu" | "inventory" | "ALL";
   page?: number;
   limit?: number;
 }
@@ -435,9 +436,16 @@ export const getSoldItemsPerformance = async (
     }
   }
 
+  let itemModelFilter: "Item" | "Inventory" | undefined;
+  if (filters.itemType === "menu") itemModelFilter = "Item";
+  if (filters.itemType === "inventory") itemModelFilter = "Inventory";
+
   const aggregateResult = await Order.aggregate([
     { $match: matchQuery },
     { $unwind: "$items" },
+    ...(itemModelFilter
+      ? [{ $match: { "items.itemModel": itemModelFilter } }]
+      : []),
     {
       $group: {
         _id: {

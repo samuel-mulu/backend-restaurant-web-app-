@@ -295,3 +295,20 @@ export const rejectItem = async (req: Request, res: Response) => {
     return sendError(res, err);
   }
 };
+
+export const addComment = async (req: Request, res: Response) => {
+  try {
+    const { comment } = req.body;
+    if (!comment) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment is required",
+      });
+    }
+
+    const item = await itemService.addComment(req.params.id, comment);
+    return sendSuccess(res, item, "Comment added successfully");
+  } catch (err) {
+    return sendError(res, err);
+  }
+};

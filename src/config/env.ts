@@ -40,4 +40,9 @@ export const env = {
   // POS Printer Service
   posPrinterUrl: process.env.POS_PRINTER_URL || "http://localhost:7777",
   posPrinterKey: process.env.POS_PRINTER_KEY || "pos-printer-secret-key-2024",
+
+  // Restaurant Location
+  restaurantLat: Number(process.env.RESTAURANT_LAT) || 0,
+  restaurantLng: Number(process.env.RESTAURANT_LNG) || 0,
+  allowedRadiusMeters: Number(process.env.ALLOWED_RADIUS_METERS) || 500,
 };

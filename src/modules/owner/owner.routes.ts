@@ -7,6 +7,9 @@ import {
 
 const router = Router();
 
+// Public location settings
+router.get("/location", ownerCtrl.getRestaurantLocation);
+
 // All owner routes require authentication
 router.use(requireAuth);
 

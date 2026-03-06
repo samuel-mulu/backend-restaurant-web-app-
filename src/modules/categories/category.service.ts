@@ -61,6 +61,7 @@ export const createCategory = async (data: {
  */
 export const listCategories = async (): Promise<any[]> => {
   const categories = await Category.find({ isDeleted: false }).sort({
+    isFavorite: -1,
     name: 1,
   });
 
@@ -96,7 +97,7 @@ export const listCategories = async (): Promise<any[]> => {
  */
 export const updateCategory = async (
   id: string,
-  data: Partial<{ name: string }>
+  data: Partial<{ name: string; isFavorite: boolean }>
 ): Promise<CategoryDoc | null> => {
   if (!Types.ObjectId.isValid(id)) {
     throw new CategoryServiceError(400, "Invalid ID", "INVALID_ID");
@@ -128,6 +129,10 @@ export const updateCategory = async (
 
       category.name = newName;
     }
+  }
+  
+  if (data.isFavorite !== undefined) {
+    category.isFavorite = data.isFavorite;
   }
 
   try {

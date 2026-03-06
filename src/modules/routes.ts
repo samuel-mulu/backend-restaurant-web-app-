@@ -14,6 +14,7 @@ import shiftsRoutes from "./shifts/shifts.routes";
 import staffRoutes from "./staff/staff.routes";
 import statisticsRoutes from "./statistics/statistics.routes";
 import syncRoutes from "./sync/sync.routes";
+import tableNotificationsRoutes from "./table-notifications/table-notification.routes";
 import tableRoutes from "./tables/table.routes";
 
 const router = Router();
@@ -34,5 +35,6 @@ router.use("/owner", ownerRoutes);
 router.use("/tables", tableRoutes);
 router.use("/expenses", expenseRoutes);
 router.use("/reports", reportRoutes);
+router.use("/table-notifications", tableNotificationsRoutes);
 
 export default router;

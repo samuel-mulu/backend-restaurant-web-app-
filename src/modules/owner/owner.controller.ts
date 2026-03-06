@@ -281,3 +281,16 @@ export const rejectOrder = async (req: Request, res: Response) => {
   }
 };
 
+// Get restaurant location settings (Public)
+export const getRestaurantLocation = async (_req: Request, res: Response) => {
+  const { env } = await import("../../config/env");
+  res.json({
+    success: true,
+    data: {
+      lat: env.restaurantLat,
+      lng: env.restaurantLng,
+      radius: env.allowedRadiusMeters,
+    },
+  });
+};
+

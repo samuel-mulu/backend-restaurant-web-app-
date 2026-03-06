@@ -16,6 +16,7 @@ export interface ItemDoc extends Document {
   image?: ImageInfo;
   isAvailable: boolean;
   isDeleted: boolean;
+  isFavorite: boolean;
   deletedAt?: Date;
   clientId?: string;
   approvalStatus: "pendingapproval" | "approved" | "rejected";
@@ -62,7 +63,7 @@ const ItemSchema = new Schema<ItemDoc>(
     isAvailable: { type: Boolean, default: true, index: true },
 
     isDeleted: { type: Boolean, default: false, index: true },
-
+    isFavorite: { type: Boolean, default: false, index: true },
     deletedAt: Date,
 
     clientId: { type: String, index: true },

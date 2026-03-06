@@ -5,6 +5,7 @@ export interface CategoryDoc extends Document {
   name: string;
   clientId?: string; // offline sync identifier
   isDeleted: boolean;
+  isFavorite: boolean;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -28,6 +29,7 @@ const CategorySchema = new Schema<CategoryDoc>(
 
     // Optional: soft delete support
     isDeleted: { type: Boolean, default: false },
+    isFavorite: { type: Boolean, default: false, index: true },
     deletedAt: Date,
   },
   {

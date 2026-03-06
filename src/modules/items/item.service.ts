@@ -32,6 +32,7 @@ export interface CreateItemInput {
   ingredients?: string[];
   mealType?: "breakfast" | "lunch" | "dinner" | "treats";
   special?: boolean;
+  isFavorite?: boolean;
 }
 
 export interface UpdateItemInput {
@@ -43,6 +44,7 @@ export interface UpdateItemInput {
   ingredients?: string[];
   mealType?: "breakfast" | "lunch" | "dinner" | "treats";
   special?: boolean;
+  isFavorite?: boolean;
 }
 
 export interface ListItemsFilters {
@@ -225,7 +227,9 @@ export const listItems = async (
     delete query.isDeleted;
   }
 
-  const items = await Item.find(query).populate("category").sort({ name: 1 });
+  const items = await Item.find(query)
+    .populate("category")
+    .sort({ isFavorite: -1, name: 1 });
 
   // Use toJSON to apply model transform (converts _id to id, handles category)
   return items.map((item) => item.toJSON());
@@ -609,6 +613,38 @@ export const rejectItem = async (
       approvedBy: new Types.ObjectId(approvedBy),
       approvedAt: new Date(),
     },
+    { new: true, runValidators: true }
+  ).populate("category");
+
+  if (!updated) {
+    throw new ItemServiceError(404, "Item not found", "ITEM_NOT_FOUND");
+  }
+
+  return updated;
+};
+
+/**
+ * Adds a comment to an item
+ * @param id - Item ID
+ * @param comment - Comment text
+ * @returns Updated item with populated category
+ * @throws {ItemServiceError} If item not found
+ */
+export const addComment = async (
+  id: string,
+  comment: string
+): Promise<ItemDoc | null> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new ItemServiceError(400, "Invalid item ID", "INVALID_ITEM_ID");
+  }
+
+  if (!comment || comment.trim() === "") {
+    throw new ItemServiceError(400, "Comment cannot be empty", "INVALID_COMMENT");
+  }
+
+  const updated = await Item.findOneAndUpdate(
+    { _id: id, isDeleted: false },
+    { $push: { comments: comment.trim() } },
     { new: true, runValidators: true }
   ).populate("category");
 

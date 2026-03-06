@@ -30,4 +30,7 @@ router.patch("/:id/reject", requireOwner, ctrl.rejectItem);
 // GET by ID (must come last after all specific routes)
 router.get("/:id", ctrl.get);
 
+// Publicly add a comment
+router.post("/:id/comments", ctrl.addComment);
+
 export default router;
