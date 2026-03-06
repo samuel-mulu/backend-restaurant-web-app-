@@ -168,3 +168,23 @@ export const rejectInventory = async (
     next(err);
   }
 };
+
+export const remove = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const deleted = await inventoryService.deleteInventory(req.params.id);
+    if (!deleted) {
+      return send(res, 404, { message: "Inventory record not found" });
+    }
+
+    return send(res, 200, {
+      message: "Inventory record deleted successfully",
+      data: deleted,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

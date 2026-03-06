@@ -120,6 +120,17 @@ export const updateInventory = async (
   return inventory;
 };
 
+/* ---------------------- DELETE ---------------------- */
+
+export const deleteInventory = async (
+  id: string
+): Promise<InventoryDoc | null> => {
+  validateObjectId(id, "Invalid inventory ID");
+
+  const inventory = await Inventory.findByIdAndDelete(id);
+  return inventory;
+};
+
 /* ---------------------- LOW STOCK ---------------------- */
 
 export const getLowStockItems = async () => {

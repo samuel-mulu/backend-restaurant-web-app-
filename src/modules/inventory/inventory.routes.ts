@@ -20,9 +20,10 @@ router.get("/pending-approvals", requireOwner, inventoryCtrl.listPendingApproval
 router.patch("/:id/approve", requireOwner, inventoryCtrl.approveInventory);
 router.patch("/:id/reject", requireOwner, inventoryCtrl.rejectInventory);
 
-// POST, PATCH: Cashier only
+// POST, PATCH, DELETE: Cashier only
 router.post("/", requireCashier, inventoryCtrl.create);
 router.patch("/:id", requireCashier, inventoryCtrl.update);
+router.delete("/:id", requireCashier, inventoryCtrl.remove);
 
 // GET by ID (must come after specific routes)
 router.get("/:id", inventoryCtrl.getById);
