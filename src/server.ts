@@ -6,13 +6,8 @@ import { connectMongo, closeMongoConnection } from "./config/database";
 import { initSockets } from "./sockets/socket";
 
 async function main() {
-  console.log("Starting server...");
-  console.log(`NODE_ENV: ${env.nodeEnv}`);
-  console.log(`PORT from env: ${process.env.PORT || "not set"}`);
-  console.log(`Using port: ${env.port}`);
 
   await connectMongo();
-  console.log("MongoDB connected successfully");
 
   const server = http.createServer(app); // ⬅ http server for socket.io
   initSockets(server, {

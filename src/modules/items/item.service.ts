@@ -518,7 +518,6 @@ export const listPendingApprovals = async (): Promise<any[]> => {
     .sort({ createdAt: -1 })
     .lean();
 
-  console.log(`[listPendingApprovals] Query returned ${items.length} items`);
 
   // Transform _id to id for lean documents and handle populated fields
   return items.map((item: any) => {

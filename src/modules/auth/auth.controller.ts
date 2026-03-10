@@ -170,7 +170,6 @@ export const login = async (
     }
 
     const probe = phone.trim();
-    console.log("🔍 Looking for user with phone:", probe);
 
     const user = await User.findOne({
       phone: probe,
@@ -178,14 +177,7 @@ export const login = async (
       .select("password role phone name email")
       .exec();
 
-    console.log("👤 User found:", user ? "Yes" : "No");
     if (user) {
-      console.log("📱 User phone:", user.phone);
-      console.log("🔒 Has password field:", !!user.password);
-      console.log(
-        "🔒 Password hash:",
-        user.password ? user.password.substring(0, 20) + "..." : "None"
-      );
     }
 
     // If user not found, equalize timing and return generic error
@@ -201,7 +193,6 @@ export const login = async (
 
     // Check if password exists
     if (!user.password) {
-      console.log("❌ No password field found");
       await timingEqualizer();
       res.status(400).json({
         success: false,
@@ -211,9 +202,7 @@ export const login = async (
       return;
     }
 
-    console.log("🔐 Verifying password...");
     const okPass = await verifyPassword(password, user.password);
-    console.log("🔐 Password verification result:", okPass);
 
     if (!okPass) {
       // Equalize a bit to blur timing between wrong-user and wrong-pass cases

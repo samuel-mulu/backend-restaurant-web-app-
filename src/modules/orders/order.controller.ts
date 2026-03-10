@@ -42,6 +42,8 @@ export const list = async (req: Request, res: Response) => {
       endDate,
       search: req.query.search as string,
       tableNumber: req.query.tableNumber as string,
+      page: req.query.page ? parseInt(req.query.page as string) : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
     };
 
     // If waiter, only show their orders
@@ -54,8 +56,8 @@ export const list = async (req: Request, res: Response) => {
       filters.cashierId = req.user._id;
     }
 
-    const orders = await orderService.listOrders(filters);
-    res.json(orders);
+    const result = await orderService.listOrders(filters);
+    res.json(result);
   } catch (error) {
     console.error("Error listing orders:", error);
     res.status(500).json({ error: "Failed to list orders" });
@@ -86,11 +88,13 @@ export const getOwnerHistory = async (req: Request, res: Response) => {
       endDate,
       search: req.query.search as string,
       tableNumber: req.query.tableNumber as string,
+      page: req.query.page ? parseInt(req.query.page as string) : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
     };
 
     // Owner can see all orders - no role-based filtering needed
-    const orders = await orderService.getOwnerOrders(filters);
-    res.json(orders);
+    const result = await orderService.getOwnerOrders(filters);
+    res.json(result);
   } catch (error) {
     console.error("Error getting owner history:", error);
     res.status(500).json({ error: "Failed to get owner history" });
@@ -234,7 +238,7 @@ export const getByWaiter = async (req: Request, res: Response) => {
 export const getByCashier = async (req: Request, res: Response) => {
   try {
     const { cashierId } = req.params;
-    const { status, waiterId, startDate, endDate } = req.query;
+    const { status, waiterId, startDate, endDate, page, limit, search } = req.query;
 
     let filters:
       | {
@@ -242,6 +246,9 @@ export const getByCashier = async (req: Request, res: Response) => {
           waiterId?: string;
           startDate?: Date;
           endDate?: Date;
+          page?: number;
+          limit?: number;
+          search?: string;
         }
       | undefined = undefined;
 
@@ -249,7 +256,10 @@ export const getByCashier = async (req: Request, res: Response) => {
       status ||
       (waiterId && typeof waiterId === "string") ||
       (startDate && typeof startDate === "string") ||
-      (endDate && typeof endDate === "string")
+      (endDate && typeof endDate === "string") ||
+      page ||
+      limit ||
+      search
     ) {
       filters = {};
       if (status) {
@@ -280,10 +290,13 @@ export const getByCashier = async (req: Request, res: Response) => {
         end.setHours(23, 59, 59, 999);
         filters.endDate = end;
       }
+      if (page) filters.page = parseInt(page as string);
+      if (limit) filters.limit = parseInt(limit as string);
+      if (search && typeof search === "string") filters.search = search;
     }
 
-    const orders = await orderService.getOrdersByCashier(cashierId, filters);
-    res.json(orders);
+    const result = await orderService.getOrdersByCashier(cashierId, filters);
+    res.json(result);
   } catch (error) {
     console.error("Error getting orders by cashier:", error);
     res.status(500).json({ error: "Failed to get orders by cashier" });

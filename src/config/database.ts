@@ -17,7 +17,6 @@ export async function connectMongo() {
       retryReads: true,
     });
 
-    console.log(" MongoDB connected securely");
     registerEventHandlers();
   } catch (err) {
     console.error("MongoDB connection error:", err);
@@ -26,7 +25,6 @@ export async function connectMongo() {
 
 function registerEventHandlers() {
   mongoose.connection.on("connected", () => {
-    console.log("Mongoose connected to MongoDB cluster");
   });
 
   mongoose.connection.on("error", (err) => {
@@ -40,14 +38,12 @@ function registerEventHandlers() {
   });
 
   mongoose.connection.on("reconnected", () => {
-    console.log("Mongoose successfully reconnected");
   });
 }
 
 export async function closeMongoConnection() {
   isShuttingDown = true;
   await mongoose.connection.close();
-  console.log(" MongoDB connection closed");
 }
 
 export function getMongoHealth() {

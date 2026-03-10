@@ -37,10 +37,6 @@ export const notifyCashiersNewOrder = (
     const io = getIO();
     const payload: PlainOrder = toPlainOrder(order);
 
-    console.log(
-      "?? Sending new order notification to cashiers:",
-      payload.orderNumber
-    );
 
     io.to("cashier:orders").emit("newOrder", {
       type: "new_order",
@@ -84,10 +80,6 @@ export const notifyCustomerOrderUpdated = (
     const io = getIO();
     const payload: PlainOrder = toPlainOrder(order);
 
-    console.log(
-      `?? Sending order update for ${payload.orderNumber}:`,
-      payload.status
-    );
 
     const baseUpdate = {
       id: payload._id,
@@ -182,7 +174,6 @@ export const broadcastOrderStats = (stats: {
 }) => {
   try {
     const io = getIO();
-    console.log("📊 Broadcasting order statistics:", stats);
 
     io.to("owner:orders").emit("orderStats", {
       type: "order_statistics",
@@ -202,7 +193,6 @@ export const broadcastSystemNotification = (
 ) => {
   try {
     const io = getIO();
-    console.log(`🔔 Broadcasting system notification: ${message}`);
 
     io.emit("systemNotification", {
       type: "system_notification",
@@ -225,7 +215,6 @@ export const notifyItemCreated = (itemData: {
 }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting new item created:", itemData.name);
 
     io.to("owner:items").emit("itemCreated", {
       type: "item_created",
@@ -254,7 +243,6 @@ export const notifyItemUpdated = (itemData: {
 }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting item updated:", itemData.name);
 
     io.to("owner:items").emit("itemUpdated", {
       type: "item_updated",
@@ -280,7 +268,6 @@ export const notifyItemUpdated = (itemData: {
 export const notifyItemDeleted = (itemData: { id: string; name: string }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting item deleted:", itemData.name);
 
     io.to("owner:items").emit("itemDeleted", {
       type: "item_deleted",
@@ -308,7 +295,6 @@ export const notifyCategoryCreated = (categoryData: {
 }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting new category created:", categoryData.name);
 
     io.to("owner:categories").emit("categoryCreated", {
       type: "category_created",
@@ -336,7 +322,6 @@ export const notifyCategoryUpdated = (categoryData: {
 }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting category updated:", categoryData.name);
 
     io.to("owner:categories").emit("categoryUpdated", {
       type: "category_updated",
@@ -362,7 +347,6 @@ export const notifyCategoryDeleted = (categoryData: {
 }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting category deleted:", categoryData.name);
 
     io.to("owner:categories").emit("categoryDeleted", {
       type: "category_deleted",
@@ -391,7 +375,6 @@ export const notifyUserCreated = (userData: {
 }) => {
   try {
     const io = getIO();
-    console.log("🔔 Broadcasting new user created:", userData.name);
 
     io.to("owner:users").emit("userCreated", {
       type: "user_created",
@@ -413,7 +396,6 @@ export const broadcastAnalyticsUpdate = (analyticsData: {
 }) => {
   try {
     const io = getIO();
-    console.log("📊 Broadcasting analytics update");
 
     io.to("owner:dashboard").emit("analyticsUpdate", {
       type: "analytics_update",
@@ -435,10 +417,6 @@ export const notifyInventoryLowStock = (inventoryData: {
 }) => {
   try {
     const io = getIO();
-    console.log(
-      "⚠️ Broadcasting inventory low stock alert:",
-      inventoryData.inventoryName
-    );
 
     io.to("owner:inventory").emit("inventory:low:stock", {
       type: "inventory_low_stock",
@@ -474,7 +452,6 @@ export const broadcastStatisticsUpdate = (stats: {
 }) => {
   try {
     const io = getIO();
-    console.log("📊 Broadcasting statistics update");
 
     io.to("owner:dashboard").emit("statistics:updated", {
       type: "statistics_updated",

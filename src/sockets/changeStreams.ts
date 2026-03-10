@@ -20,10 +20,6 @@ export const startOrderChangeStream = (io: Server) => {
       const isReplicaSet = await checkReplicaSetSupport();
 
       if (!isReplicaSet) {
-        console.log(
-          "⚠️  MongoDB Change Streams require replica set configuration"
-        );
-        console.log("📡 Falling back to polling-based real-time updates");
         startPollingFallback(io);
         return;
       }
@@ -41,13 +37,8 @@ export const startOrderChangeStream = (io: Server) => {
         },
       ]);
 
-      console.log("🔄 MongoDB Change Stream started for Orders collection");
 
       changeStream.on("change", async (change: any) => {
-        console.log(
-          "📊 Order collection change detected:",
-          change.operationType
-        );
 
         try {
           switch (change.operationType) {
@@ -68,7 +59,6 @@ export const startOrderChangeStream = (io: Server) => {
 
       changeStream.on("error", (error: any) => {
         console.error("Change stream error:", error);
-        console.log("📡 Falling back to polling-based real-time updates");
 
         // Stop change stream and start polling fallback
         if (changeStream) {
@@ -80,7 +70,6 @@ export const startOrderChangeStream = (io: Server) => {
       });
     } catch (error) {
       console.error("Failed to start change stream:", error);
-      console.log("📡 Falling back to polling-based real-time updates");
       startPollingFallback(io);
     }
   };
@@ -112,7 +101,6 @@ const checkReplicaSetSupport = async (): Promise<boolean> => {
     });
     return true;
   } catch (error: any) {
-    console.log("🔍 Change streams not supported:", error.message);
     return false;
   }
 };
@@ -122,9 +110,6 @@ let pollingInterval: NodeJS.Timeout | null = null;
 let lastOrderCount = 0;
 
 const startPollingFallback = (io: Server) => {
-  console.log(
-    "🔄 Starting polling-based real-time updates (5 second intervals)"
-  );
 
   // Clear any existing polling
   if (pollingInterval) {
@@ -150,7 +135,6 @@ const startPollingFallback = (io: Server) => {
             "name description price images type isAvailable ingredients"
           );
 
-        console.log(`📊 Polling detected ${newOrders.length} new orders`);
 
         for (const order of newOrders) {
           await handleOrderInsert(io, { fullDocument: order });
@@ -199,7 +183,6 @@ const handleOrderUpdate = async (_io: Server, change: any) => {
   const orderId = change.documentKey._id;
   const updatedFields = change.updateDescription?.updatedFields ?? {};
 
-  console.log(`?? Order updated via change stream: ${orderId}`);
 
   try {
     const order = await Order.findById(orderId).populate(
@@ -225,7 +208,6 @@ const handleOrderUpdate = async (_io: Server, change: any) => {
 const handleOrderDelete = async (io: Server, change: any) => {
   const orderId = change.documentKey._id;
 
-  console.log(`🗑️ Order deleted via change stream: ${orderId}`);
 
   // Broadcast to all relevant clients
   io.to("owner:orders").emit("orderDeleted", {
@@ -258,12 +240,10 @@ export const stopChangeStream = () => {
   if (changeStream) {
     changeStream.close();
     changeStream = null;
-    console.log("🛑 Change stream stopped");
   }
   if (pollingInterval) {
     clearInterval(pollingInterval);
     pollingInterval = null;
-    console.log("🛑 Polling fallback stopped");
   }
 };
 
@@ -278,9 +258,6 @@ export const startInventoryChangeStream = (io: Server) => {
       const isReplicaSet = await checkReplicaSetSupport();
 
       if (!isReplicaSet) {
-        console.log(
-          "⚠️  MongoDB Change Streams require replica set configuration for inventory"
-        );
         return;
       }
 
@@ -292,7 +269,6 @@ export const startInventoryChangeStream = (io: Server) => {
         },
       ]);
 
-      console.log("🔄 MongoDB Change Stream started for Inventory collection");
 
       inventoryChangeStream.on("change", async (change: any) => {
         try {

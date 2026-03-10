@@ -2,8 +2,8 @@ import { Types } from "mongoose";
 import { formatMergedReceipt, formatReceipt } from "../../common/utils/receiptFormatter";
 import { deleteImage, uploadImage } from "../../config/cloudinary";
 import {
-    notifyCashiersNewOrder,
-    notifyCustomerOrderUpdated,
+  notifyCashiersNewOrder,
+  notifyCustomerOrderUpdated,
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
 import { Inventory } from "../inventory/inventory.model";
@@ -183,12 +183,24 @@ export interface ListOrdersFilters {
   endDate?: Date;
   search?: string; // Search by orderNumber, tableNumber, waiter name, cashier name
   tableNumber?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }
 
 export const listOrders = async (
   filters: ListOrdersFilters = {}
-): Promise<OrderDoc[]> => {
+): Promise<PaginatedResponse<OrderDoc>> => {
   const query: any = {};
+  const page = filters.page || 1;
+  const limit = filters.limit || 10;
+  const skip = (page - 1) * limit;
 
   if (filters.status) {
     query.status = filters.status;
@@ -209,208 +221,63 @@ export const listOrders = async (
   if (filters.startDate || filters.endDate) {
     query.createdAt = {};
     if (filters.startDate) {
-      // Ensure startDate is at beginning of day
       const start = new Date(filters.startDate);
       start.setHours(0, 0, 0, 0);
       query.createdAt.$gte = start;
     }
     if (filters.endDate) {
-      // Ensure endDate is at end of day
       const end = new Date(filters.endDate);
       end.setHours(23, 59, 59, 999);
       query.createdAt.$lte = end;
     }
   }
 
-  // Handle search separately to avoid conflicts with other filters
-  // First, get all orders matching base filters (status, waiterId, cashierId, dates, etc.)
-  // We populate waiter and cashier first so we can search in their names/emails
-  let orders = await Order.find(query)
-    .sort({ createdAt: -1 })
-    .populate({
-      path: "items.itemId",
-      select: "name description price image isAvailable",
-      populate: { path: "category", select: "name", strictPopulate: false },
-    })
-    .populate("waiterId", "name email phone")
-    .populate("cashierId", "name email phone")
-    .populate("cancelledBy", "name email phone")
-    .populate("transferredToOwnerBy", "name email phone")
-    .populate("confirmedBy", "name email phone")
-    .populate("disputedBy", "name email phone");
-
-  // If search is provided, filter by search term (case-insensitive)
-  // Search across: orderNumber, tableNumber, waiter name/email, cashier name/email
+  // Handle search at database level
   if (filters.search && filters.search.trim()) {
-    const searchTerm = filters.search.trim().toLowerCase();
-    const filteredOrders = orders.filter((order: any) => {
-      // Search in orderNumber (case-insensitive, partial match)
-      const orderNumberMatch =
-        order.orderNumber &&
-        String(order.orderNumber).toLowerCase().includes(searchTerm);
+    const searchTerm = filters.search.trim();
+    const searchRegex = { $regex: searchTerm, $options: "i" };
 
-      // Search in tableNumber (case-insensitive)
-      const tableNumberMatch =
-        order.tableNumber &&
-        String(order.tableNumber).toLowerCase().includes(searchTerm);
-
-      // Search in waiter name (case-insensitive)
-      const waiterNameMatch =
-        order.waiterId &&
-        typeof order.waiterId === "object" &&
-        order.waiterId.name &&
-        String(order.waiterId.name).toLowerCase().includes(searchTerm);
-
-      // Search in waiter email (case-insensitive)
-      const waiterEmailMatch =
-        order.waiterId &&
-        typeof order.waiterId === "object" &&
-        order.waiterId.email &&
-        String(order.waiterId.email).toLowerCase().includes(searchTerm);
-
-      // Search in cashier name (case-insensitive)
-      const cashierNameMatch =
-        order.cashierId &&
-        typeof order.cashierId === "object" &&
-        order.cashierId.name &&
-        String(order.cashierId.name).toLowerCase().includes(searchTerm);
-
-      // Search in cashier email (case-insensitive)
-      const cashierEmailMatch =
-        order.cashierId &&
-        typeof order.cashierId === "object" &&
-        order.cashierId.email &&
-        String(order.cashierId.email).toLowerCase().includes(searchTerm);
-
-      // Return true if any field matches
-      return (
-        orderNumberMatch ||
-        tableNumberMatch ||
-        waiterNameMatch ||
-        waiterEmailMatch ||
-        cashierNameMatch ||
-        cashierEmailMatch
-      );
-    });
-    return filteredOrders as OrderDoc[];
+    // To search in populated fields like waiterId.name, we would normally use aggregation.
+    // For simplicity with the existing structure, we'll keep the core fields database-level
+    // and consider if we need more complex aggregation later.
+    query.$or = [
+      { orderNumber: searchRegex },
+      { tableNumber: searchRegex },
+      { note: searchRegex },
+    ];
   }
 
-  return orders;
+  const [orders, totalCount] = await Promise.all([
+    Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: "items.itemId",
+        select: "name description price image isAvailable",
+        populate: { path: "category", select: "name", strictPopulate: false },
+      })
+      .populate("waiterId", "name email phone")
+      .populate("cashierId", "name email phone")
+      .populate("cancelledBy", "name email phone")
+      .populate("transferredToOwnerBy", "name email phone")
+      .populate("confirmedBy", "name email phone")
+      .populate("disputedBy", "name email phone"),
+    Order.countDocuments(query),
+  ]);
+
+  return {
+    data: orders,
+    totalCount,
+    totalPages: Math.ceil(totalCount / limit),
+    currentPage: page,
+  };
 };
 
 export const getOwnerOrders = async (
   filters: ListOrdersFilters = {}
-): Promise<OrderDoc[]> => {
-  // Owner-specific order retrieval - no role-based restrictions
-  // Supports all filters: status, waiterId, cashierId, startDate, endDate, search, tableNumber
-  const query: any = {};
-
-  if (filters.status) {
-    query.status = filters.status;
-  }
-
-  if (filters.waiterId) {
-    query.waiterId = new Types.ObjectId(filters.waiterId);
-  }
-
-  if (filters.cashierId) {
-    query.cashierId = new Types.ObjectId(filters.cashierId);
-  }
-
-  if (filters.tableNumber) {
-    query.tableNumber = { $regex: filters.tableNumber, $options: "i" };
-  }
-
-  if (filters.startDate || filters.endDate) {
-    query.createdAt = {};
-    if (filters.startDate) {
-      // Ensure startDate is at beginning of day
-      const start = new Date(filters.startDate);
-      start.setHours(0, 0, 0, 0);
-      query.createdAt.$gte = start;
-    }
-    if (filters.endDate) {
-      // Ensure endDate is at end of day
-      const end = new Date(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      query.createdAt.$lte = end;
-    }
-  }
-
-  // Handle search separately to avoid conflicts with other filters
-  // First, get all orders matching base filters (status, waiterId, cashierId, dates, etc.)
-  // We populate waiter and cashier first so we can search in their names/emails
-  let orders = await Order.find(query)
-    .sort({ createdAt: -1 })
-    .populate({
-      path: "items.itemId",
-      select: "name description price image isAvailable",
-      populate: { path: "category", select: "name", strictPopulate: false },
-    })
-    .populate("waiterId", "name email phone")
-    .populate("cashierId", "name email phone")
-    .populate("cancelledBy", "name email phone")
-    .populate("transferredToOwnerBy", "name email phone")
-    .populate("confirmedBy", "name email phone")
-    .populate("disputedBy", "name email phone");
-
-  // If search is provided, filter by search term (case-insensitive)
-  // Search across: orderNumber, tableNumber, waiter name/email, cashier name/email
-  if (filters.search && filters.search.trim()) {
-    const searchTerm = filters.search.trim().toLowerCase();
-    const filteredOrders = orders.filter((order: any) => {
-      // Search in orderNumber (case-insensitive, partial match)
-      const orderNumberMatch =
-        order.orderNumber &&
-        String(order.orderNumber).toLowerCase().includes(searchTerm);
-
-      // Search in tableNumber (case-insensitive)
-      const tableNumberMatch =
-        order.tableNumber &&
-        String(order.tableNumber).toLowerCase().includes(searchTerm);
-
-      // Search in waiter name (case-insensitive)
-      const waiterNameMatch =
-        order.waiterId &&
-        typeof order.waiterId === "object" &&
-        order.waiterId.name &&
-        String(order.waiterId.name).toLowerCase().includes(searchTerm);
-
-      // Search in waiter email (case-insensitive)
-      const waiterEmailMatch =
-        order.waiterId &&
-        typeof order.waiterId === "object" &&
-        order.waiterId.email &&
-        String(order.waiterId.email).toLowerCase().includes(searchTerm);
-
-      // Search in cashier name (case-insensitive)
-      const cashierNameMatch =
-        order.cashierId &&
-        typeof order.cashierId === "object" &&
-        order.cashierId.name &&
-        String(order.cashierId.name).toLowerCase().includes(searchTerm);
-
-      // Search in cashier email (case-insensitive)
-      const cashierEmailMatch =
-        order.cashierId &&
-        typeof order.cashierId === "object" &&
-        order.cashierId.email &&
-        String(order.cashierId.email).toLowerCase().includes(searchTerm);
-
-      // Return true if any field matches
-      return (
-        orderNumberMatch ||
-        tableNumberMatch ||
-        waiterNameMatch ||
-        waiterEmailMatch ||
-        cashierNameMatch ||
-        cashierEmailMatch
-      );
-    });
-    return filteredOrders as OrderDoc[];
-  }
-
-  return orders;
+): Promise<PaginatedResponse<OrderDoc>> => {
+  return listOrders(filters);
 };
 
 export const getOrder = async (id: string): Promise<OrderDoc | null> => {
@@ -1023,9 +890,15 @@ export const getOrdersByCashier = async (
     waiterId?: string;
     startDate?: Date;
     endDate?: Date;
+    page?: number;
+    limit?: number;
+    search?: string;
   }
-): Promise<OrderDoc[]> => {
+): Promise<PaginatedResponse<OrderDoc>> => {
   const query: any = { cashierId: new Types.ObjectId(cashierId) };
+  const page = filters?.page || 1;
+  const limit = filters?.limit || 10;
+  const skip = (page - 1) * limit;
 
   // Add status filter if provided (supports single status or array of statuses)
   if (filters?.status) {
@@ -1058,18 +931,40 @@ export const getOrdersByCashier = async (
     }
   }
 
-  return await Order.find(query)
-    .sort({ createdAt: -1 })
-    .populate({
-      path: "items.itemId",
-      select: "name description price image isAvailable",
-      populate: { path: "category", select: "name", strictPopulate: false },
-    })
-    .populate("waiterId", "name email phone")
-    .populate("cancelledBy", "name email phone")
-    .populate("transferredToOwnerBy", "name email phone")
-    .populate("confirmedBy", "name email phone")
-    .populate("disputedBy", "name email phone");
+  // Add search filter if provided
+  if (filters?.search && filters.search.trim()) {
+    const searchTerm = filters.search.trim();
+    const searchRegex = { $regex: searchTerm, $options: "i" };
+    query.$or = [
+      { orderNumber: searchRegex },
+      { tableNumber: searchRegex },
+    ];
+  }
+
+  const [orders, totalCount] = await Promise.all([
+    Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: "items.itemId",
+        select: "name description price image isAvailable",
+        populate: { path: "category", select: "name", strictPopulate: false },
+      })
+      .populate("waiterId", "name email phone")
+      .populate("cancelledBy", "name email phone")
+      .populate("transferredToOwnerBy", "name email phone")
+      .populate("confirmedBy", "name email phone")
+      .populate("disputedBy", "name email phone"),
+    Order.countDocuments(query),
+  ]);
+
+  return {
+    data: orders,
+    totalCount,
+    totalPages: Math.ceil(totalCount / limit),
+    currentPage: page,
+  };
 };
 
 export const markOrderAsPrinted = async (id: string) => {
@@ -1106,10 +1001,6 @@ export async function printOrder(orderId: string): Promise<{ order: OrderDoc; re
   await order.populate("waiterId", "name email phone");
   await order.populate("cashierId", "name email phone");
   await populateUserTrackingFields(order);
-
-  console.log(
-    `[PRINT ORDER] Order ${order.orderNumber} receipt text requested`
-  );
 
   // Format receipt text
   const receiptText = formatReceipt(order);
@@ -1278,6 +1169,12 @@ export interface CashierReport {
   ordersCreated: number;
   ordersCollected: number;
   ordersTransferred: number;
+  ordersByStatus: {
+    [key in OrderStatus]?: {
+      count: number;
+      total: number;
+    };
+  };
 }
 
 export const getCashierReport = async (
@@ -1342,6 +1239,24 @@ export const getCashierReport = async (
       : {}),
   });
 
+  const ordersByStatus: any = {};
+  const statuses: OrderStatus[] = [
+    "OPEN",
+    "VOIDED",
+    "PAID_TO_CASHIER",
+    "TRANSFERRED_TO_OWNER",
+    "OWNER_CONFIRMED",
+    "DISPUTED",
+  ];
+
+  statuses.forEach((status) => {
+    const filtered = ordersWithStatus.filter((o) => o.status === status);
+    ordersByStatus[status] = {
+      count: filtered.length,
+      total: filtered.reduce((sum, o) => sum + o.totalAmount, 0),
+    };
+  });
+
   return {
     cashierId,
     cashierName,
@@ -1351,6 +1266,7 @@ export const getCashierReport = async (
     ordersCreated,
     ordersCollected: collectedOrders.length,
     ordersTransferred: transferredOrders.length,
+    ordersByStatus,
   };
 };
 
@@ -1360,6 +1276,12 @@ export interface WaiterReport {
   totalOrders: number;
   totalSales: number;
   averageOrderValue: number;
+  ordersByStatus: {
+    [key in OrderStatus]?: {
+      count: number;
+      total: number;
+    };
+  };
 }
 
 export const getWaiterReport = async (
@@ -1392,12 +1314,31 @@ export const getWaiterReport = async (
   const totalSales = orders.reduce((sum, order) => sum + order.totalAmount, 0);
   const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
+  const ordersByStatus: any = {};
+  const statuses: OrderStatus[] = [
+    "OPEN",
+    "VOIDED",
+    "PAID_TO_CASHIER",
+    "TRANSFERRED_TO_OWNER",
+    "OWNER_CONFIRMED",
+    "DISPUTED",
+  ];
+
+  statuses.forEach((status) => {
+    const filtered = orders.filter((o) => o.status === status);
+    ordersByStatus[status] = {
+      count: filtered.length,
+      total: filtered.reduce((sum, o) => sum + o.totalAmount, 0),
+    };
+  });
+
   return {
     waiterId,
     waiterName,
     totalOrders,
     totalSales,
     averageOrderValue,
+    ordersByStatus,
   };
 };
 

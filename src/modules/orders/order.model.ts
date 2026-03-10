@@ -50,7 +50,7 @@ export interface OrderDoc extends Document {
 
 const orderSchema = new Schema<OrderDoc>(
   {
-    orderNumber: { type: String, required: true, unique: true, index: true },
+    orderNumber: { type: String, required: true, unique: true },
     tableNumber: { type: String, required: false },
     items: [
       {

@@ -24,8 +24,7 @@ const TableNotificationSchema = new Schema<TableNotificationDoc>(
   { timestamps: true }
 );
 
-// Explicitly ensure the TTL index is handled if needed, though 'expires' in schema handles it
-TableNotificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 1200 });
+// TTL index: 20 minutes handled by 'expires' field above
 
 export const TableNotification = model<TableNotificationDoc>(
   "TableNotification",

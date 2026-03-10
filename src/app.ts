@@ -28,7 +28,7 @@ app.use(helmet());
 app.use(corsOptions);
 
 //**====limiting the request rate==== */
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 400 }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 2000 }));
 
 //**====limiting the request body size==== */
 app.use(express.json({ limit: "20mb" }));
