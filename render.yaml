@@ -8,52 +8,53 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Note: PORT is automatically set by Render, no need to configure it
-      # Database - Set this in Render dashboard
+      - key: NODE_VERSION
+        value: "18.20.0"
       - key: MONGO_URI
-        sync: false
-      # JWT Configuration - Set these in Render dashboard
+        value: mongodb+srv://planetranking067:4dPAQjfAXrOJBlIl@cluster0.dxfb4ya.mongodb.net/3t-juice?retryWrites=true&w=majority&appName=Cluster0
       - key: JWT_SECRET
-        sync: false
+        value: 2efefda868a4ab5e6dfefd9b4ac7d89eafb1d72f8d1ad402b0736ed35d8aee93c90ffdccbef2dc7e9bcc40b9d57bb8805164d453d40cd59cf96242bafa29fc76
       - key: JWT_REFRESH_SECRET
-        sync: false
+        value: 79ac0de7182ecca29aae20528e374dd78965569e12badee0024dacd9d0956f1c75fe1c02ee31952e6120dc4ac28f427f2e5bc331386f7971c6a6a683a6965550
       - key: JWT_ACCESS_EXPIRES
         value: 15m
       - key: JWT_REFRESH_EXPIRES
         value: 30d
-      # CORS and Cookies - Update with your frontend URL
       - key: CORS_ORIGIN
-        sync: false
+        value: http://localhost:3000
       - key: COOKIE_DOMAIN
-        sync: false
+        value: localhost
       - key: SECURE_COOKIES
-        value: true
-      # Cloudinary (Optional) - Set in Render dashboard if using
+        value: "true"
       - key: CLOUDINARY_CLOUD_NAME
-        sync: false
+        value: dmay3msot
       - key: CLOUDINARY_API_KEY
-        sync: false
+        value: "842879659918633"
       - key: CLOUDINARY_API_SECRET
-        sync: false
+        value: 36ILu6fx4UycKcwLcjnMRr9I_5M
       - key: CLOUDINARY_URL
-        sync: false
-      # Email Configuration (Optional) - Set in Render dashboard if using
+        value: cloudinary://842879659918633:36ILu6fx4UycKcwLcjnMRr9I_5M@dmay3msot
       - key: SMTP_HOST
-        sync: false
+        value: smtp.gmail.com
       - key: SMTP_PORT
-        value: 587
+        value: "587"
       - key: SMTP_SECURE
-        value: false
+        value: "false"
       - key: SMTP_USER
-        sync: false
+        value: your-email@gmail.com
       - key: SMTP_PASS
-        sync: false
+        value: your-app-password
       - key: SMTP_FROM_NAME
         value: Menu App
       - key: SMTP_FROM_EMAIL
-        sync: false
-      # POS Printer Service (Optional) - Set in Render dashboard if needed
+        value: your-email@gmail.com
       - key: POS_PRINTER_URL
-        sync: false
+        value: http://localhost:7777
       - key: POS_PRINTER_KEY
-        sync: false
+        value: pos-printer-secret-key-2024
+      - key: RESTAURANT_LAT
+        value: "8.9944312"
+      - key: RESTAURANT_LNG
+        value: "38.7737417"
+      - key: ALLOWED_RADIUS_METERS
+        value: "500"
