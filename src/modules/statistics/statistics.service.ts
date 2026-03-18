@@ -460,6 +460,20 @@ export const getSoldItemsPerformance = async (
       },
     },
     {
+      $lookup: {
+        from: "items",
+        localField: "_id.itemId",
+        foreignField: "_id",
+        as: "itemDoc",
+      },
+    },
+    {
+      $unwind: {
+        path: "$itemDoc",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
       $project: {
         _id: 0,
         itemId: { $toString: "$_id.itemId" },
@@ -467,6 +481,7 @@ export const getSoldItemsPerformance = async (
         itemType: {
           $cond: [{ $eq: ["$_id.itemModel", "Inventory"] }, "inventory", "menu"],
         },
+        mealType: { $ifNull: ["$itemDoc.mealType", null] },
         qtySold: 1,
         salesAmount: 1,
       },
