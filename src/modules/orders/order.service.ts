@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { formatMergedReceipt, formatReceipt } from "../../common/utils/receiptFormatter";
 import { deleteImage, uploadImage } from "../../config/cloudinary";
 import {
@@ -130,32 +130,62 @@ export const createOrder = async (
 
   const orderNumber = await generateOrderNumber();
 
-  const order = await Order.create({
-    orderNumber,
-    tableNumber: payload.tableNumber,
-    items: payload.items.map((i) => ({
-      itemId: new Types.ObjectId(i.itemId) as any,
-      itemModel: inventoryIds.has(i.itemId) ? "Inventory" : "Item",
-      qty: i.qty,
-      nameSnapshot: i.nameSnapshot,
-      priceSnapshot: i.priceSnapshot,
-    })),
-    note: payload.note,
-    totalAmount: subtotal,
-    status: payload.markAsPaidToCashier ? "PAID_TO_CASHIER" : "OPEN",
-    placedAt: new Date(),
-    paymentReceivedAt: payload.markAsPaidToCashier ? new Date() : undefined,
-    waiterId: new Types.ObjectId(payload.waiterId),
-    cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
-    clientId: payload.clientId,
-  });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  // Decrement inventory quantities after order creation
-  for (const { inventory, qty } of inventoryItemsToUpdate) {
-    inventory.quantity -= qty;
-    await inventory.save();
+  let order: OrderDoc;
+
+  try {
+    const [created] = await Order.create(
+      [
+        {
+          orderNumber,
+          tableNumber: payload.tableNumber,
+          items: payload.items.map((i) => ({
+            itemId: new Types.ObjectId(i.itemId) as any,
+            itemModel: inventoryIds.has(i.itemId) ? "Inventory" : "Item",
+            qty: i.qty,
+            nameSnapshot: i.nameSnapshot,
+            priceSnapshot: i.priceSnapshot,
+          })),
+          note: payload.note,
+          totalAmount: subtotal,
+          status: payload.markAsPaidToCashier ? "PAID_TO_CASHIER" : "OPEN",
+          placedAt: new Date(),
+          paymentReceivedAt: payload.markAsPaidToCashier ? new Date() : undefined,
+          waiterId: new Types.ObjectId(payload.waiterId),
+          cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
+          clientId: payload.clientId,
+        },
+      ],
+      { session },
+    );
+    order = created;
+
+    // Atomic inventory decrement - prevents overselling under concurrent requests
+    for (const { inventory, qty } of inventoryItemsToUpdate) {
+      const result = await Inventory.findOneAndUpdate(
+        { _id: inventory._id, quantity: { $gte: qty } },
+        { $inc: { quantity: -qty } },
+        { new: true, session },
+      );
+      if (!result) {
+        throw {
+          status: 400,
+          message: `Insufficient quantity for ${inventory.name}. Available: ${inventory.quantity}, Requested: ${qty}`,
+        };
+      }
+    }
+
+    await session.commitTransaction();
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
   }
 
+  // order from create above
   // Populate item details with categories before returning
   await order.populate({
     path: "items.itemId",
@@ -897,7 +927,7 @@ export const getOrdersByCashier = async (
 ): Promise<PaginatedResponse<OrderDoc>> => {
   const query: any = { cashierId: new Types.ObjectId(cashierId) };
   const page = filters?.page || 1;
-  const limit = filters?.limit || 10;
+  const limit = filters?.limit || 20;
   const skip = (page - 1) * limit;
 
   // Add status filter if provided (supports single status or array of statuses)

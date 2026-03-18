@@ -7,6 +7,7 @@ export interface ExpenseDoc extends Document {
   reason: string;
   description?: string;
   date: Date;
+  expenseType?: "cash" | "mobile_banking";
   staffId?: Types.ObjectId;
   createdBy: Types.ObjectId;
   createdAt: Date;
@@ -34,6 +35,11 @@ const ExpenseSchema = new Schema<ExpenseDoc>(
       required: true,
       default: Date.now,
       index: true,
+    },
+    expenseType: {
+      type: String,
+      enum: ["cash", "mobile_banking"],
+      default: "cash",
     },
     staffId: {
       type: Schema.Types.ObjectId,

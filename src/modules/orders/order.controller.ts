@@ -1,3 +1,4 @@
+import { parseEndOfDay, parseStartOfDay } from "../../common/utils/dateUtils";
 import { Request, Response } from "express";
 import { OrderStatus } from "./order.model";
 import * as orderService from "./order.service";
@@ -25,13 +26,11 @@ export const list = async (req: Request, res: Response) => {
     let endDate: Date | undefined;
 
     if (req.query.startDate) {
-      startDate = new Date(req.query.startDate as string);
-      startDate.setHours(0, 0, 0, 0);
+      startDate = parseStartOfDay(req.query.startDate as string);
     }
 
     if (req.query.endDate) {
-      endDate = new Date(req.query.endDate as string);
-      endDate.setHours(23, 59, 59, 999);
+      endDate = parseEndOfDay(req.query.endDate as string);
     }
 
     const filters = {
@@ -71,13 +70,11 @@ export const getOwnerHistory = async (req: Request, res: Response) => {
     let endDate: Date | undefined;
 
     if (req.query.startDate) {
-      startDate = new Date(req.query.startDate as string);
-      startDate.setHours(0, 0, 0, 0);
+      startDate = parseStartOfDay(req.query.startDate as string);
     }
 
     if (req.query.endDate) {
-      endDate = new Date(req.query.endDate as string);
-      endDate.setHours(23, 59, 59, 999);
+      endDate = parseEndOfDay(req.query.endDate as string);
     }
 
     const filters = {
@@ -281,14 +278,10 @@ export const getByCashier = async (req: Request, res: Response) => {
         filters.waiterId = waiterId;
       }
       if (startDate && typeof startDate === "string") {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        filters.startDate = start;
+        filters.startDate = parseStartOfDay(startDate);
       }
       if (endDate && typeof endDate === "string") {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        filters.endDate = end;
+        filters.endDate = parseEndOfDay(endDate);
       }
       if (page) filters.page = parseInt(page as string);
       if (limit) filters.limit = parseInt(limit as string);
@@ -380,10 +373,10 @@ export const getCashierReport = async (req: Request, res: Response) => {
     }
 
     const startDate = req.query.startDate
-      ? new Date(req.query.startDate as string)
+      ? parseStartOfDay(req.query.startDate as string)
       : undefined;
     const endDate = req.query.endDate
-      ? new Date(req.query.endDate as string)
+      ? parseEndOfDay(req.query.endDate as string)
       : undefined;
 
     const report = await orderService.getCashierReport(
@@ -406,10 +399,10 @@ export const getWaiterReport = async (req: Request, res: Response) => {
   try {
     const { waiterId } = req.params;
     const startDate = req.query.startDate
-      ? new Date(req.query.startDate as string)
+      ? parseStartOfDay(req.query.startDate as string)
       : undefined;
     const endDate = req.query.endDate
-      ? new Date(req.query.endDate as string)
+      ? parseEndOfDay(req.query.endDate as string)
       : undefined;
 
     const report = await orderService.getWaiterReport(
@@ -431,10 +424,10 @@ export const getWaiterReport = async (req: Request, res: Response) => {
 export const getStatusReport = async (req: Request, res: Response) => {
   try {
     const startDate = req.query.startDate
-      ? new Date(req.query.startDate as string)
+      ? parseStartOfDay(req.query.startDate as string)
       : undefined;
     const endDate = req.query.endDate
-      ? new Date(req.query.endDate as string)
+      ? parseEndOfDay(req.query.endDate as string)
       : undefined;
 
     const report = await orderService.getStatusReport(startDate, endDate);
@@ -460,8 +453,8 @@ export const getDateRangeReport = async (req: Request, res: Response) => {
     }
 
     const report = await orderService.getDateRangeReport(
-      new Date(startDate as string),
-      new Date(endDate as string)
+      parseStartOfDay(startDate as string),
+      parseEndOfDay(endDate as string),
     );
     res.json(report);
   } catch (error: any) {

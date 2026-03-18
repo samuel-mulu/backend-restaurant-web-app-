@@ -1,3 +1,4 @@
+import { parseEndOfDay, parseStartOfDay } from "../../common/utils/dateUtils";
 import { NextFunction, Request, Response } from "express";
 import * as statisticsService from "./statistics.service";
 
@@ -9,10 +10,10 @@ export const getDashboard = async (
   try {
     const dateRange = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? new Date(req.query.endDate as string)
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
     };
 
@@ -35,14 +36,10 @@ export const getSales = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? (() => {
-            const d = new Date(req.query.endDate as string);
-            d.setHours(23, 59, 59, 999);
-            return d;
-          })()
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
       cashierId: req.query.cashierId as string,
     };
@@ -66,14 +63,10 @@ export const getProducts = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? (() => {
-            const d = new Date(req.query.endDate as string);
-            d.setHours(23, 59, 59, 999);
-            return d;
-          })()
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
       limit: req.query.limit
         ? parseInt(req.query.limit as string)
@@ -100,14 +93,10 @@ export const getItemPerformance = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? (() => {
-            const d = new Date(req.query.endDate as string);
-            d.setHours(23, 59, 59, 999);
-            return d;
-          })()
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
       status: req.query.status as string,
       paymentMethod: req.query.paymentMethod as string,
@@ -135,14 +124,10 @@ export const getStaff = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? (() => {
-            const d = new Date(req.query.endDate as string);
-            d.setHours(23, 59, 59, 999);
-            return d;
-          })()
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
     };
 
@@ -165,14 +150,10 @@ export const getInventory = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? new Date(req.query.startDate as string)
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? (() => {
-            const d = new Date(req.query.endDate as string);
-            d.setHours(23, 59, 59, 999);
-            return d;
-          })()
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
       status: req.query.status as string,
     };
@@ -196,18 +177,10 @@ export const getComprehensive = async (
   try {
     const filters = {
       startDate: req.query.startDate
-        ? (() => {
-            const d = new Date(req.query.startDate as string);
-            d.setHours(0, 0, 0, 0);
-            return d;
-          })()
+        ? parseStartOfDay(req.query.startDate as string)
         : undefined,
       endDate: req.query.endDate
-        ? (() => {
-            const d = new Date(req.query.endDate as string);
-            d.setHours(23, 59, 59, 999);
-            return d;
-          })()
+        ? parseEndOfDay(req.query.endDate as string)
         : undefined,
       status: req.query.status as string,
     };

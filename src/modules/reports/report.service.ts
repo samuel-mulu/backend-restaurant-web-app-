@@ -45,6 +45,7 @@ export const getReportData = async (
   startDate: Date,
   endDate: Date,
   statuses?: string[],
+  expenseType?: "cash" | "mobile_banking",
 ) => {
   const normalizedStatuses =
     statuses && statuses.length > 0 ? statuses.filter(Boolean) : undefined;
@@ -57,9 +58,21 @@ export const getReportData = async (
     matchQuery.status = { $in: normalizedStatuses };
   }
 
-  const expenseQuery = {
+  const expenseQuery: any = {
     date: { $gte: startDate, $lte: endDate },
   };
+
+  if (expenseType) {
+    if (expenseType === "cash") {
+      expenseQuery.$or = [
+        { expenseType: { $exists: false } },
+        { expenseType: null },
+        { expenseType: "cash" },
+      ];
+    } else {
+      expenseQuery.expenseType = expenseType;
+    }
+  }
 
   try {
     const [reportRaw, expenses] = await Promise.all([
