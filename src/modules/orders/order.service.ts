@@ -55,6 +55,8 @@ export type CreateOrderInput = {
   cashierId?: string; // Optional, will be auto-assigned from req.user if cashier
   clientId?: string; // For offline sync idempotency
   markAsPaidToCashier?: boolean; // Optional - if true, order starts with PAID_TO_CASHIER status
+  markAsTransferredToOwner?: boolean; // Optional - if true, order starts with TRANSFERRED_TO_OWNER status
+  paymentMethod?: "cash" | "mobile_banking"; // Required when markAsTransferredToOwner is true
 };
 
 export const createOrder = async (
@@ -135,6 +137,25 @@ export const createOrder = async (
 
   let order: OrderDoc;
 
+  const now = new Date();
+  let initialStatus: OrderStatus = "OPEN";
+  let paymentReceivedAt: Date | undefined;
+  let paymentDeliveredAt: Date | undefined;
+  let orderPaymentMethod: "cash" | "mobile_banking" | undefined;
+  let transferredToOwnerBy: Types.ObjectId | undefined;
+
+  if (payload.markAsTransferredToOwner) {
+    initialStatus = "TRANSFERRED_TO_OWNER";
+    paymentReceivedAt = now;
+    paymentDeliveredAt = now;
+    orderPaymentMethod = payload.paymentMethod || "cash";
+    transferredToOwnerBy = cashierId ? new Types.ObjectId(cashierId) : undefined;
+  } else if (payload.markAsPaidToCashier) {
+    initialStatus = "PAID_TO_CASHIER";
+    paymentReceivedAt = now;
+    orderPaymentMethod = payload.paymentMethod || "cash";
+  }
+
   try {
     const [created] = await Order.create(
       [
@@ -150,9 +171,12 @@ export const createOrder = async (
           })),
           note: payload.note,
           totalAmount: subtotal,
-          status: payload.markAsPaidToCashier ? "PAID_TO_CASHIER" : "OPEN",
-          placedAt: new Date(),
-          paymentReceivedAt: payload.markAsPaidToCashier ? new Date() : undefined,
+          status: initialStatus,
+          placedAt: now,
+          paymentReceivedAt,
+          paymentDeliveredAt,
+          paymentMethod: orderPaymentMethod,
+          transferredToOwnerBy,
           waiterId: new Types.ObjectId(payload.waiterId),
           cashierId: cashierId ? new Types.ObjectId(cashierId) : undefined,
           clientId: payload.clientId,
@@ -329,7 +353,7 @@ export const getOrder = async (id: string): Promise<OrderDoc | null> => {
 
 // Valid status transitions
 const validStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
-  OPEN: ["VOIDED", "PAID_TO_CASHIER"],
+  OPEN: ["VOIDED", "PAID_TO_CASHIER", "TRANSFERRED_TO_OWNER"],
   VOIDED: [], // Terminal state - cannot be changed
   PAID_TO_CASHIER: ["TRANSFERRED_TO_OWNER", "DISPUTED"],
   TRANSFERRED_TO_OWNER: ["OWNER_CONFIRMED"], // Owner can confirm the transferred cash
@@ -376,16 +400,17 @@ export const updateOrderStatus = async (
 
   // Role-based permission validation
   if (user.role === "cashier") {
-    // Cashier can: OPEN → VOIDED or PAID_TO_CASHIER
+    // Cashier can: OPEN → VOIDED, PAID_TO_CASHIER, or TRANSFERRED_TO_OWNER
     if (
       order.status === "OPEN" &&
       status !== "VOIDED" &&
-      status !== "PAID_TO_CASHIER"
+      status !== "PAID_TO_CASHIER" &&
+      status !== "TRANSFERRED_TO_OWNER"
     ) {
       throw {
         status: 403,
         message:
-          "Cashier can only void or mark as paid to cashier from OPEN status",
+          "Cashier can only void, mark as paid to waiter, or mark as paid to cashier from OPEN status",
       };
     }
     // Cashier can: PAID_TO_CASHIER → TRANSFERRED_TO_OWNER
@@ -512,6 +537,11 @@ export const updateOrderStatus = async (
     if (user.role === "cashier" && !order.cashierId) {
       order.cashierId = userIdObjectId as any;
     }
+    if (paymentMethod) {
+      order.paymentMethod = paymentMethod;
+    } else if (!order.paymentMethod) {
+      order.paymentMethod = "cash";
+    }
   } else if (status === "OWNER_CONFIRMED") {
     order.completedAt = now;
     order.confirmedBy = userIdObjectId as any;
@@ -533,9 +563,9 @@ export const updateOrderStatus = async (
   // Broadcast status change
   notifyCustomerOrderUpdated(order, { updatedFields: { status } });
 
-  // Automatically format receipt if status changed to PAID_TO_CASHIER
+  // Automatically format receipt if status changed to PAID_TO_CASHIER or TRANSFERRED_TO_OWNER
   let receiptText: string | undefined;
-  if (status === "PAID_TO_CASHIER") {
+  if (status === "PAID_TO_CASHIER" || status === "TRANSFERRED_TO_OWNER") {
     receiptText = formatReceipt(order);
   }
 
@@ -549,7 +579,8 @@ export const updateOrderStatus = async (
 export const bulkUpdateOrderStatus = async (
   orderIds: string[],
   newStatus: OrderStatus,
-  userId: string
+  userId: string,
+  paymentMethod?: "cash" | "mobile_banking"
 ): Promise<{
   updated: Array<OrderDoc & { receiptText?: string }>;
   failed: Array<{ id: string; reason: string }>;
@@ -609,16 +640,17 @@ export const bulkUpdateOrderStatus = async (
 
   // Role-based permission validation for the transition
   if (user.role === "cashier") {
-    // Cashier can: OPEN → VOIDED or PAID_TO_CASHIER
+    // Cashier can: OPEN → VOIDED, PAID_TO_CASHIER, or TRANSFERRED_TO_OWNER
     if (
       firstOrderStatus === "OPEN" &&
       newStatus !== "VOIDED" &&
-      newStatus !== "PAID_TO_CASHIER"
+      newStatus !== "PAID_TO_CASHIER" &&
+      newStatus !== "TRANSFERRED_TO_OWNER"
     ) {
       throw {
         status: 403,
         message:
-          "Cashier can only void or mark as paid to cashier from OPEN status",
+          "Cashier can only void, mark as paid to waiter, or mark as paid to cashier from OPEN status",
       };
     }
     // Cashier can: PAID_TO_CASHIER → TRANSFERRED_TO_OWNER
@@ -703,6 +735,11 @@ export const bulkUpdateOrderStatus = async (
         if (user.role === "cashier" && !order.cashierId) {
           order.cashierId = userIdObjectId as any;
         }
+        if (paymentMethod) {
+          order.paymentMethod = paymentMethod;
+        } else if (!order.paymentMethod) {
+          order.paymentMethod = "cash";
+        }
       } else if (newStatus === "OWNER_CONFIRMED") {
         order.completedAt = now;
         order.confirmedBy = userIdObjectId as any;
@@ -726,9 +763,9 @@ export const bulkUpdateOrderStatus = async (
         updatedFields: { status: newStatus },
       });
 
-      // Generate receipt text if new status is PAID_TO_CASHIER
+      // Generate receipt text if new status is PAID_TO_CASHIER or TRANSFERRED_TO_OWNER
       let receiptText: string | undefined;
-      if (newStatus === "PAID_TO_CASHIER") {
+      if (newStatus === "PAID_TO_CASHIER" || newStatus === "TRANSFERRED_TO_OWNER") {
         receiptText = formatReceipt(order);
       }
 

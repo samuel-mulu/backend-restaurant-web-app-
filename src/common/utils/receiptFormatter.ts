@@ -85,8 +85,23 @@ export function formatReceipt(order: OrderDoc): string {
   lines.push(line("TOTAL:", `BIRR ${displayTotal.toFixed(2)}`, MAX_LINE_WIDTH));
   lines.push(separator("-"));
 
-  // Status
-  lines.push(`Status: ${order.status}`);
+  // Status - use friendly labels, omit for OPEN
+  const STATUS_LABELS: Record<string, string> = {
+    OPEN: "Pending",
+    PAID_TO_CASHIER: "Paid to Waiter",
+    TRANSFERRED_TO_OWNER: "Paid to Cashier",
+    OWNER_CONFIRMED: "Confirmed",
+    VOIDED: "Voided",
+    DISPUTED: "Disputed",
+  };
+  let statusLabel = STATUS_LABELS[order.status] || order.status;
+  if (order.status === "TRANSFERRED_TO_OWNER" && order.paymentMethod) {
+    const pm = order.paymentMethod === "mobile_banking" ? "Mobile Banking" : "Cash";
+    statusLabel += ` (${pm})`;
+  }
+  if (order.status !== "OPEN") {
+    lines.push(`Status: ${statusLabel}`);
+  }
 
   // Staff Information
   if (order.waiterId && typeof order.waiterId === "object") {

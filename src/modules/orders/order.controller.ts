@@ -172,7 +172,7 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const { orderIds, status } = req.body;
+    const { orderIds, status, paymentMethod } = req.body;
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: "Order IDs array is required" });
     }
@@ -183,7 +183,8 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
     const result = await orderService.bulkUpdateOrderStatus(
       orderIds,
       status,
-      req.user._id
+      req.user._id,
+      paymentMethod
     );
 
     res.json({
