@@ -105,6 +105,14 @@ router.patch(
   orderCtrl.markAsPrinted
 );
 
+// Get receipt text for printing (Cashier/Owner) - must be before GET /:id
+router.get(
+  "/:id/receipt",
+  requireAuth,
+  requireRole("cashier", "owner"),
+  orderCtrl.printOrder
+);
+
 // Get single order details (for customers with order code or authenticated users)
 router.get("/:id", orderCtrl.getOrder);
 
