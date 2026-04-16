@@ -1,4 +1,4 @@
-import { Document, Schema, Types, model } from "mongoose";
+import mongoose, { Document, Schema, Types, model } from "mongoose";
 
 export type OrderStatus =
   | "OPEN"
@@ -186,10 +186,16 @@ export async function fixOrderCodeIndex(): Promise<void> {
 
 // Auto-fix on model initialization (runs when Order model is first imported)
 if (typeof process !== "undefined") {
-  // Use setImmediate to ensure mongoose is connected
-  setImmediate(() => {
+  const runFix = () => {
     fixOrderCodeIndex().catch(() => {
       indexFixAttempted = false;
     });
-  });
+  };
+
+  // Only run after Mongo is connected (prevents buffering timeouts on cold start)
+  if (mongoose.connection.readyState === 1) {
+    runFix();
+  } else {
+    mongoose.connection.once("connected", runFix);
+  }
 }
