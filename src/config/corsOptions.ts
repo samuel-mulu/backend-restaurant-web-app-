@@ -5,8 +5,10 @@ const allowedOrigins = [
   "http://localhost:5000",
   "http://192.168.247.135:3000", // ✅ FIXED (added http://)
   env.corsOrigin,
+  "https://frontend-restaurant-web-app.vercel.app",
   "https://menu-wheat-sigma.vercel.app",
   "https://kandinos.vercel.app", // ✅ ADDED (your missing frontend)
+  "https://lounge-restaurant.netlify.app",
 ]
   .filter((domain): domain is string => Boolean(domain))
   .map((domain) => domain.toLowerCase().replace(/\/$/, ""));
