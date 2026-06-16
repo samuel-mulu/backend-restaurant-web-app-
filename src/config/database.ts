@@ -1,3 +1,4 @@
+import dns from "dns";
 import mongoose from "mongoose";
 import { env } from "./env";
 
@@ -5,6 +6,11 @@ let isShuttingDown = false;
 
 export async function connectMongo() {
   try {
+    // Some Windows/ISP DNS resolvers reject SRV lookups required by mongodb+srv URIs.
+    if (env.mongoUri.startsWith("mongodb+srv://")) {
+      dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+    }
+
     await mongoose.connect(env.mongoUri, {
       maxPoolSize: env.isProd ? 50 : 10,
       minPoolSize: env.isProd ? 10 : 1,
