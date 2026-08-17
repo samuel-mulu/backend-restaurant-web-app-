@@ -62,6 +62,7 @@ async function seedUsers() {
 
     // Connect to MongoDB
     await connectMongo();
+    console.log(`📦 Database: ${mongoose.connection.name}`);
 
     // Clear existing users (optional - comment out if you want to keep existing users)
     console.log("🗑️  Clearing existing users...");
