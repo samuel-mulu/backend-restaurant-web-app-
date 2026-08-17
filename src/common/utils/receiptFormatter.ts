@@ -6,7 +6,7 @@ import { OrderDoc } from "../../modules/orders/order.model";
  */
 export function formatReceipt(order: OrderDoc): string {
   const MAX_LINE_WIDTH = 32;
-  const restaurantName = "kandino's kitchen";
+  const restaurantName = "3T Juice House";
 
   // Helper function to center text
   const center = (text: string, width: number = MAX_LINE_WIDTH): string => {
@@ -161,7 +161,7 @@ function wrapText(text: string, width: number): string[] {
  */
 export function formatMergedReceipt(orders: OrderDoc[]): string {
   const MAX_LINE_WIDTH = 32;
-  const restaurantName = "kandino's kitchen";
+  const restaurantName = "3T Juice House";
 
   const center = (text: string, width: number = MAX_LINE_WIDTH): string => {
     const padding = Math.max(0, Math.floor((width - text.length) / 2));
