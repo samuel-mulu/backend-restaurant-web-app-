@@ -1,0 +1,89 @@
+# Tekeze Lounge — isolated production stack
+#
+# Project:  tekeze-lounge
+# Network:  tekeze_lounge_internal  (do not join friendsbingo_default)
+# Volume:   tekeze_lounge_mongo_data
+#
+# Mongo is not published on the host. API is localhost-only.
+# Candidate host port is 127.0.0.1:5100 — confirm it is free with `ss -lntp`
+# before `up`. Override with TEKEZE_API_HOST_PORT if 5100 is taken.
+#
+# Copy env.production.example to .env before `up`.
+
+name: tekeze-lounge
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: tekeze-lounge-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-tekeze_lounge}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme_replace_on_vps}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-tekeze_lounge}
+    volumes:
+      - tekeze_lounge_mongo_data:/data/db
+    networks:
+      - tekeze_lounge_internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\" | grep -q 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tekeze-lounge-api:prod
+    container_name: tekeze-lounge-api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:-tekeze_lounge}:${MONGO_ROOT_PASSWORD:-changeme_replace_on_vps}@tekeze-lounge-mongo:27017/${MONGO_DATABASE:-tekeze_lounge}?authSource=admin
+    ports:
+      - "127.0.0.1:${TEKEZE_API_HOST_PORT:-5100}:5000"
+    networks:
+      - tekeze_lounge_internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: "0.50"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  tekeze_lounge_mongo_data:
+    name: tekeze_lounge_mongo_data
+
+networks:
+  tekeze_lounge_internal:
+    name: tekeze_lounge_internal
+    driver: bridge
