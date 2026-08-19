@@ -5,10 +5,7 @@ import {
   requireAuth,
   requireRole,
 } from "../../common/middleware/authMiddleware";
-import {
-  authLimiter,
-  sensitiveEndpointLimiter,
-} from "../../common/middleware/rateLimiter";
+import { sensitiveEndpointLimiter } from "../../common/middleware/rateLimiter";
 import { validate } from "../../common/middleware/validate";
 import {
   updateOwnerProfileSchema,
@@ -25,7 +22,7 @@ router.post(
   requireOwner,
   ctrl.createStaff
 );
-router.post("/login", authLimiter, ctrl.login);
+router.post("/login", ctrl.login);
 router.post("/logout", ctrl.logout);
 router.post("/refresh", ctrl.refreshToken);
 router.get("/profile", requireAuth, ctrl.profile);
