@@ -28,7 +28,8 @@ AppIcons (1)
 *.png
 *.tsbuildinfo
 
-src/seeders
+src/seeders/*
+!src/seeders/seedInitialOwner.ts
 src/scripts
 
 testTotal.ts

@@ -16,7 +16,8 @@
     "seed": "ts-node src/seeders/seed.ts",
     "seed:users": "ts-node src/seeders/seedUsers.ts",
     "seed:tables": "ts-node src/seeders/seedTables.ts",
-    "seed:all": "ts-node src/seeders/seedAll.ts"
+    "seed:all": "ts-node src/seeders/seedAll.ts",
+    "seed:owner": "node dist/seeders/seedInitialOwner.js"
   },
   "dependencies": {
     "axios": "^1.13.2",
