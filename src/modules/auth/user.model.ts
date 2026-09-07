@@ -31,7 +31,7 @@ const UserSchema = new Schema<UserDoc>(
     password: { type: String, required: true },
     role: {
       type: String,
-      enum: ["owner", "cashier", "waiter", "staff"],
+      enum: ["owner", "cashier", "waiter", "staff", "barman"],
       default: "cashier",
     },
     phone: {

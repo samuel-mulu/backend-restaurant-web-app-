@@ -7,6 +7,7 @@ export interface InventoryDoc extends Document {
   quantity: number;
   unit: string;
   price: number;
+  isBarman: boolean;
   clientId?: string;
   approvalStatus: "pendingapproval" | "approved" | "rejected";
   approvedBy?: Types.ObjectId;
@@ -49,6 +50,12 @@ const InventorySchema = new Schema<InventoryDoc>(
       type: Number,
       required: true,
       min: 0,
+    },
+
+    isBarman: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
 
     clientId: {

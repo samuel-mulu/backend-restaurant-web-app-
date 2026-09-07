@@ -135,6 +135,7 @@ export const updateStatus = async (req: Request, res: Response) => {
 
     // Extract payment bank name if provided
     const paymentBankName = req.body.paymentBankName;
+    const pin = req.body.pin;
 
     // Get payment proof image file if provided (from multer)
     const paymentProofImageFile = req.file;
@@ -145,7 +146,8 @@ export const updateStatus = async (req: Request, res: Response) => {
       req.user._id,
       paymentMethod,
       paymentProofImageFile,
-      paymentBankName
+      paymentBankName,
+      pin
     );
 
     if (!result) {
@@ -172,7 +174,7 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const { orderIds, status, paymentMethod } = req.body;
+    const { orderIds, status, paymentMethod, pin } = req.body;
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: "Order IDs array is required" });
     }
@@ -184,7 +186,8 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       orderIds,
       status,
       req.user._id,
-      paymentMethod
+      paymentMethod,
+      pin
     );
 
     res.json({
@@ -233,67 +236,93 @@ export const getByWaiter = async (req: Request, res: Response) => {
   }
 };
 
+const parseCashierListFilters = (
+  query: Request["query"],
+  options?: { includePagination?: boolean }
+) => {
+  const { status, waiterId, startDate, endDate, page, limit, search } = query;
+  const includePagination = options?.includePagination !== false;
+
+  let filters:
+    | {
+        status?: OrderStatus | OrderStatus[];
+        waiterId?: string;
+        startDate?: Date;
+        endDate?: Date;
+        page?: number;
+        limit?: number;
+        search?: string;
+      }
+    | undefined = undefined;
+
+  const hasFilters =
+    status ||
+    (waiterId && typeof waiterId === "string") ||
+    (startDate && typeof startDate === "string") ||
+    (endDate && typeof endDate === "string") ||
+    (includePagination && (page || limit)) ||
+    search;
+
+  if (hasFilters) {
+    filters = {};
+    if (status) {
+      if (Array.isArray(status)) {
+        filters.status = status as OrderStatus[];
+      } else if (typeof status === "string") {
+        if (status.includes(",")) {
+          filters.status = status
+            .split(",")
+            .map((s) => s.trim()) as OrderStatus[];
+        } else {
+          filters.status = status as OrderStatus;
+        }
+      }
+    }
+    if (waiterId && typeof waiterId === "string") {
+      filters.waiterId = waiterId;
+    }
+    if (startDate && typeof startDate === "string") {
+      filters.startDate = parseStartOfDay(startDate);
+    }
+    if (endDate && typeof endDate === "string") {
+      filters.endDate = parseEndOfDay(endDate);
+    }
+    if (includePagination) {
+      if (page) filters.page = parseInt(page as string);
+      if (limit) filters.limit = parseInt(limit as string);
+    }
+    if (search && typeof search === "string") filters.search = search;
+  }
+
+  return filters;
+};
+
 export const getByCashier = async (req: Request, res: Response) => {
   try {
     const { cashierId } = req.params;
-    const { status, waiterId, startDate, endDate, page, limit, search } = req.query;
-
-    let filters:
-      | {
-          status?: OrderStatus | OrderStatus[];
-          waiterId?: string;
-          startDate?: Date;
-          endDate?: Date;
-          page?: number;
-          limit?: number;
-          search?: string;
-        }
-      | undefined = undefined;
-
-    if (
-      status ||
-      (waiterId && typeof waiterId === "string") ||
-      (startDate && typeof startDate === "string") ||
-      (endDate && typeof endDate === "string") ||
-      page ||
-      limit ||
-      search
-    ) {
-      filters = {};
-      if (status) {
-        // Handle array of statuses (comma-separated string or array)
-        if (Array.isArray(status)) {
-          filters.status = status as OrderStatus[];
-        } else if (typeof status === "string") {
-          // Check if comma-separated
-          if (status.includes(",")) {
-            filters.status = status
-              .split(",")
-              .map((s) => s.trim()) as OrderStatus[];
-          } else {
-            filters.status = status as OrderStatus;
-          }
-        }
-      }
-      if (waiterId && typeof waiterId === "string") {
-        filters.waiterId = waiterId;
-      }
-      if (startDate && typeof startDate === "string") {
-        filters.startDate = parseStartOfDay(startDate);
-      }
-      if (endDate && typeof endDate === "string") {
-        filters.endDate = parseEndOfDay(endDate);
-      }
-      if (page) filters.page = parseInt(page as string);
-      if (limit) filters.limit = parseInt(limit as string);
-      if (search && typeof search === "string") filters.search = search;
-    }
-
+    const filters = parseCashierListFilters(req.query);
     const result = await orderService.getOrdersByCashier(cashierId, filters);
     res.json(result);
   } catch (error) {
     console.error("Error getting orders by cashier:", error);
     res.status(500).json({ error: "Failed to get orders by cashier" });
+  }
+};
+
+export const getByCashierSummary = async (req: Request, res: Response) => {
+  try {
+    const { cashierId } = req.params;
+    const filters = parseCashierListFilters(req.query, {
+      includePagination: false,
+    });
+    const result = await orderService.getOrdersByCashierSummary(
+      cashierId,
+      filters
+    );
+    res.json(result);
+  } catch (error) {
+    console.error("Error getting cashier orders summary:", error);
+    res.status(500).json({ error: "Failed to get cashier orders summary" });
   }
 };
 
@@ -330,7 +359,11 @@ export const cancel = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const order = await orderService.cancelOrder(req.params.id, req.user._id);
+    const order = await orderService.cancelOrder(
+      req.params.id,
+      req.user._id,
+      req.body.pin
+    );
     res.json({ success: true, data: order });
   } catch (error: any) {
     console.error("Error cancelling order:", error);

@@ -26,6 +26,11 @@ router.get(
 );
 router.get("/", requireAuth, orderCtrl.list);
 router.get("/waiter/:waiterId", requireAuth, orderCtrl.getByWaiter);
+router.get(
+  "/cashier/:cashierId/summary",
+  requireAuth,
+  orderCtrl.getByCashierSummary
+);
 router.get("/cashier/:cashierId", requireAuth, orderCtrl.getByCashier);
 
 // Report routes (Owner only) - must be before /:id route

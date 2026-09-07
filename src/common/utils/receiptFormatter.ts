@@ -1,5 +1,21 @@
 import { OrderDoc } from "../../modules/orders/order.model";
 
+const ADDIS_TZ = "Africa/Addis_Ababa";
+
+/** Receipt date/time in East Africa (independent of server TZ). */
+function formatReceiptDateTime(date: Date): string {
+  return date.toLocaleString("en-GB", {
+    timeZone: ADDIS_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 /**
  * Format order data into a receipt text optimized for thermal printers (58mm width)
  * Thermal printers typically support 32 characters per line
@@ -35,7 +51,7 @@ export function formatReceipt(order: OrderDoc): string {
   // Order Information
   lines.push(`Order: ${order.orderNumber}`);
   const orderDate = new Date(order.createdAt || order.placedAt);
-  lines.push(`Date: ${orderDate.toLocaleDateString()} ${orderDate.toLocaleTimeString()}`);
+  lines.push(`Date: ${formatReceiptDateTime(orderDate)}`);
 
   if (order.tableNumber) {
     lines.push(`Table: ${order.tableNumber}`);
@@ -184,7 +200,7 @@ export function formatMergedReceipt(orders: OrderDoc[]): string {
   lines.push(center("MERGED RECEIPT"));
 
   const printDate = new Date();
-  lines.push(`Date: ${printDate.toLocaleDateString()} ${printDate.toLocaleTimeString()}`);
+  lines.push(`Date: ${formatReceiptDateTime(printDate)}`);
   lines.push(separator("-"));
 
   let grandTotal = 0;

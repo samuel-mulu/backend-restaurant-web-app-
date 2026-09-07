@@ -3,6 +3,7 @@ import { Inventory, InventoryDoc } from "./inventory.model";
 
 export interface ListInventoryFilters {
   lowStock?: boolean;
+  forOrder?: boolean;
 }
 
 export interface CreateInventoryInput {
@@ -11,6 +12,7 @@ export interface CreateInventoryInput {
   quantity: number;
   unit: string;
   price: number;
+  isBarman?: boolean;
 }
 
 export interface UpdateInventoryInput {
@@ -19,6 +21,7 @@ export interface UpdateInventoryInput {
   quantity?: number;
   unit?: string;
   price?: number;
+  isBarman?: boolean;
 }
 
 /* ---------------------- COMMON UTILS ---------------------- */
@@ -42,9 +45,63 @@ export const listInventory = async (filters: ListInventoryFilters = {}) => {
     query.quantity = { $lte: 0 };
   }
 
-  return Inventory.find(query)
+  const items = await Inventory.find(query)
     .sort(filters.lowStock ? { quantity: 1 } : { createdAt: -1 })
     .lean();
+
+  if (!filters.forOrder) {
+    return items;
+  }
+
+  // For create-order: barman items only appear when approved remaining > 0
+  const { InventoryAssignment } = await import(
+    "../inventory-assignments/inventory-assignment.model"
+  );
+
+  const barmanIds = items
+    .filter((item: any) => item.isBarman)
+    .map((item: any) => item._id);
+
+  const remainingByInventory = new Map<string, number>();
+  if (barmanIds.length > 0) {
+    const aggregates = await InventoryAssignment.aggregate([
+      {
+        $match: {
+          inventoryId: { $in: barmanIds },
+          status: "approved",
+          remainingQuantity: { $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: "$inventoryId",
+          availableQuantity: { $sum: "$remainingQuantity" },
+        },
+      },
+    ]);
+    for (const row of aggregates) {
+      remainingByInventory.set(row._id.toString(), row.availableQuantity);
+    }
+  }
+
+  return items
+    .map((item: any) => {
+      if (!item.isBarman) {
+        return {
+          ...item,
+          availableQuantity: item.quantity,
+        };
+      }
+      const availableQuantity = remainingByInventory.get(item._id.toString()) || 0;
+      return {
+        ...item,
+        availableQuantity,
+      };
+    })
+    .filter((item: any) => {
+      if (!item.isBarman) return true;
+      return item.availableQuantity > 0;
+    });
 };
 
 /* ---------------------- GET BY ID ---------------------- */
@@ -75,6 +132,7 @@ export const createInventory = async (
     quantity: data.quantity,
     unit: data.unit,
     price: data.price,
+    isBarman: Boolean(data.isBarman),
     approvalStatus: "pendingapproval", // New inventory requires approval
   });
 
@@ -110,6 +168,10 @@ export const updateInventory = async (
     if (data.price < 0)
       throw { status: 400, message: "Price cannot be negative" };
     inventory.price = data.price;
+  }
+
+  if (data.isBarman !== undefined) {
+    inventory.isBarman = Boolean(data.isBarman);
   }
 
   // Updates require re-approval

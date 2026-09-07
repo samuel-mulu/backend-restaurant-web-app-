@@ -14,6 +14,7 @@ export const list = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = {
       lowStock: req.query.lowStock === "true",
+      forOrder: req.query.forOrder === "true",
     };
 
     const items = await inventoryService.listInventory(filters);

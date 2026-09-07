@@ -9,6 +9,7 @@ export const ROLE_RANK: Record<Role, number> = {
   cashier: 2,
   waiter: 1,
   staff: 1,
+  barman: 1,
 };
 
 // Extend Express Request interface to include user

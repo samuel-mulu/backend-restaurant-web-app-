@@ -1,15 +1,22 @@
 import { Request, Response } from "express";
+import { assertSecurityPin } from "../settings/settings.service";
 import * as expenseService from "./expense.service";
 
 export const createExpense = async (req: Request, res: Response) => {
   try {
+    await assertSecurityPin("expense", req.body.pin);
+
+    const { pin: _pin, ...expenseData } = req.body;
     const expense = await expenseService.createExpense({
-      ...req.body,
+      ...expenseData,
       expenseType: req.body.expenseType || "cash",
       createdBy: (req as any).user._id,
     });
     res.status(201).json({ success: true, data: expense });
   } catch (error: any) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
     res.status(400).json({ success: false, message: error.message });
   }
 };

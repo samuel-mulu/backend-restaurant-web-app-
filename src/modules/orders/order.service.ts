@@ -7,6 +7,7 @@ import {
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
 import { Inventory } from "../inventory/inventory.model";
+import { assertSecurityPin } from "../settings/settings.service";
 import { Order, OrderDoc, OrderStatus, fixOrderCodeIndex } from "./order.model";
 
 // Helper function to populate user tracking fields
@@ -102,21 +103,47 @@ export const createOrder = async (
   }
 
   // Validate inventory quantities before order creation
-  const inventoryItemsToUpdate: Array<{ inventory: any; qty: number }> = [];
+  const inventoryItemsToUpdate: Array<{
+    inventory: any;
+    qty: number;
+    isBarman: boolean;
+  }> = [];
 
   for (const item of payload.items) {
     // Check if this itemId exists in Inventory model
     const inventory = await Inventory.findById(item.itemId);
     if (inventory) {
-      // This is an inventory item - validate quantity
-      if (inventory.quantity < item.qty) {
-        throw {
-          status: 400,
-          message: `Insufficient quantity for ${inventory.name}. Available: ${inventory.quantity}, Requested: ${item.qty}`,
-        };
+      if (inventory.isBarman) {
+        const {
+          getApprovedRemaining,
+        } = await import(
+          "../inventory-assignments/inventory-assignment.service"
+        );
+        const available = await getApprovedRemaining(inventory._id.toString());
+        if (available < item.qty) {
+          throw {
+            status: 400,
+            message: `Insufficient approved barman quantity for ${inventory.name}. Available: ${available}, Requested: ${item.qty}`,
+          };
+        }
+        inventoryItemsToUpdate.push({
+          inventory,
+          qty: item.qty,
+          isBarman: true,
+        });
+      } else {
+        if (inventory.quantity < item.qty) {
+          throw {
+            status: 400,
+            message: `Insufficient quantity for ${inventory.name}. Available: ${inventory.quantity}, Requested: ${item.qty}`,
+          };
+        }
+        inventoryItemsToUpdate.push({
+          inventory,
+          qty: item.qty,
+          isBarman: false,
+        });
       }
-      // Store for later decrement
-      inventoryItemsToUpdate.push({ inventory, qty: item.qty });
     }
   }
 
@@ -187,17 +214,31 @@ export const createOrder = async (
     order = created;
 
     // Atomic inventory decrement - prevents overselling under concurrent requests
-    for (const { inventory, qty } of inventoryItemsToUpdate) {
-      const result = await Inventory.findOneAndUpdate(
-        { _id: inventory._id, quantity: { $gte: qty } },
-        { $inc: { quantity: -qty } },
-        { new: true, session },
-      );
-      if (!result) {
-        throw {
-          status: 400,
-          message: `Insufficient quantity for ${inventory.name}. Available: ${inventory.quantity}, Requested: ${qty}`,
-        };
+    const {
+      decrementAssignmentRemaining,
+    } = await import(
+      "../inventory-assignments/inventory-assignment.service"
+    );
+
+    for (const { inventory, qty, isBarman } of inventoryItemsToUpdate) {
+      if (isBarman) {
+        await decrementAssignmentRemaining(
+          inventory._id.toString(),
+          qty,
+          session
+        );
+      } else {
+        const result = await Inventory.findOneAndUpdate(
+          { _id: inventory._id, quantity: { $gte: qty } },
+          { $inc: { quantity: -qty } },
+          { new: true, session },
+        );
+        if (!result) {
+          throw {
+            status: 400,
+            message: `Insufficient quantity for ${inventory.name}. Available: ${inventory.quantity}, Requested: ${qty}`,
+          };
+        }
       }
     }
 
@@ -367,7 +408,8 @@ export const updateOrderStatus = async (
   userId: string,
   paymentMethod?: "cash" | "mobile_banking",
   paymentProofImageFile?: Express.Multer.File,
-  paymentBankName?: string
+  paymentBankName?: string,
+  pin?: string
 ): Promise<{ order: OrderDoc; receiptText?: string } | null> => {
   const order = await Order.findById(id);
 
@@ -382,6 +424,10 @@ export const updateOrderStatus = async (
       status: 400,
       message: `Invalid status transition from ${order.status} to ${status}`,
     };
+  }
+
+  if (status === "VOIDED") {
+    await assertSecurityPin("void", pin);
   }
 
   // Validate user permissions
@@ -580,7 +626,8 @@ export const bulkUpdateOrderStatus = async (
   orderIds: string[],
   newStatus: OrderStatus,
   userId: string,
-  paymentMethod?: "cash" | "mobile_banking"
+  paymentMethod?: "cash" | "mobile_banking",
+  pin?: string
 ): Promise<{
   updated: Array<OrderDoc & { receiptText?: string }>;
   failed: Array<{ id: string; reason: string }>;
@@ -588,6 +635,10 @@ export const bulkUpdateOrderStatus = async (
 }> => {
   if (!orderIds || orderIds.length === 0) {
     throw { status: 400, message: "Order IDs are required" };
+  }
+
+  if (newStatus === "VOIDED") {
+    await assertSecurityPin("void", pin);
   }
 
   // Validate user permissions
@@ -873,25 +924,59 @@ export const updateOrder = async (
 
       if (delta > 0) {
         const inv = inventoryMap.get(itemId);
-        if (!inv || inv.quantity < delta) {
+        if (!inv) {
+          throw {
+            status: 400,
+            message: "Inventory Item not found",
+          };
+        }
+        if (inv.isBarman) {
+          const {
+            getApprovedRemaining,
+          } = await import(
+            "../inventory-assignments/inventory-assignment.service"
+          );
+          const available = await getApprovedRemaining(itemId);
+          if (available < delta) {
+            throw {
+              status: 400,
+              message: `Insufficient approved barman quantity for ${inv.name}. Available: ${available}, Additional requested: ${delta}`,
+            };
+          }
+        } else if (inv.quantity < delta) {
           throw {
             status: 400,
             message: `Insufficient quantity for ${
-              inv?.name || "Inventory Item"
-            }. Available: ${inv?.quantity || 0}, Additional requested: ${delta}`,
+              inv.name || "Inventory Item"
+            }. Available: ${inv.quantity || 0}, Additional requested: ${delta}`,
           };
         }
       }
     }
 
-    // Apply adjustments to Inventory stock
+    // Apply adjustments to Inventory / barman assignment stock
+    const {
+      decrementAssignmentRemaining,
+      incrementAssignmentRemaining,
+    } = await import(
+      "../inventory-assignments/inventory-assignment.service"
+    );
+
     for (const itemId of allInventoryIds) {
       const oldQty = oldInventoryQtys.get(itemId) || 0;
       const newQty = newInventoryQtys.get(itemId) || 0;
       const delta = newQty - oldQty;
+      const inv = inventoryMap.get(itemId);
 
-      if (delta !== 0) {
-        // If delta > 0, we decrease stock. If delta < 0, we increase stock (release).
+      if (delta === 0) continue;
+
+      if (inv?.isBarman) {
+        if (delta > 0) {
+          await decrementAssignmentRemaining(itemId, delta);
+        } else {
+          await incrementAssignmentRemaining(itemId, -delta);
+        }
+      } else {
         await Inventory.findByIdAndUpdate(itemId, {
           $inc: { quantity: -delta },
         });
@@ -950,24 +1035,25 @@ export const getOrdersByWaiter = async (
     .populate("disputedBy", "name email phone");
 };
 
-export const getOrdersByCashier = async (
-  cashierId: string,
-  filters?: {
-    status?: OrderStatus | OrderStatus[];
-    waiterId?: string;
-    startDate?: Date;
-    endDate?: Date;
-    page?: number;
-    limit?: number;
-    search?: string;
-  }
-): Promise<PaginatedResponse<OrderDoc>> => {
-  const query: any = { cashierId: new Types.ObjectId(cashierId) };
-  const page = filters?.page || 1;
-  const limit = filters?.limit || 20;
-  const skip = (page - 1) * limit;
+type CashierOrderFilters = {
+  status?: OrderStatus | OrderStatus[];
+  waiterId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  page?: number;
+  limit?: number;
+  search?: string;
+};
 
-  // Add status filter if provided (supports single status or array of statuses)
+/** Shared match query for cashier list + summary (pagination not applied here). */
+const buildCashierOrdersQuery = (
+  cashierId: string,
+  filters?: Omit<CashierOrderFilters, "page" | "limit">
+): Record<string, unknown> => {
+  const query: Record<string, unknown> = {
+    cashierId: new Types.ObjectId(cashierId),
+  };
+
   if (filters?.status) {
     if (Array.isArray(filters.status)) {
       query.status = { $in: filters.status };
@@ -976,29 +1062,25 @@ export const getOrdersByCashier = async (
     }
   }
 
-  // Add waiter filter if provided
   if (filters?.waiterId) {
     query.waiterId = new Types.ObjectId(filters.waiterId);
   }
 
-  // Add date range filter if provided
   if (filters?.startDate || filters?.endDate) {
-    query.createdAt = {};
+    const createdAt: { $gte?: Date; $lte?: Date } = {};
     if (filters.startDate) {
-      // Ensure startDate is at beginning of day
       const start = new Date(filters.startDate);
       start.setHours(0, 0, 0, 0);
-      query.createdAt.$gte = start;
+      createdAt.$gte = start;
     }
     if (filters.endDate) {
-      // Ensure endDate is at end of day (23:59:59.999)
       const end = new Date(filters.endDate);
       end.setHours(23, 59, 59, 999);
-      query.createdAt.$lte = end;
+      createdAt.$lte = end;
     }
+    query.createdAt = createdAt;
   }
 
-  // Add search filter if provided
   if (filters?.search && filters.search.trim()) {
     const searchTerm = filters.search.trim();
     const searchRegex = { $regex: searchTerm, $options: "i" };
@@ -1007,6 +1089,63 @@ export const getOrdersByCashier = async (
       { tableNumber: searchRegex },
     ];
   }
+
+  return query;
+};
+
+export type CashierOrdersSummary = {
+  totalOrders: number;
+  totalAmount: number;
+  byStatus: Partial<
+    Record<OrderStatus, { count: number; total: number }>
+  >;
+};
+
+/** Counts/sums for all orders matching filters (ignores pagination). */
+export const getOrdersByCashierSummary = async (
+  cashierId: string,
+  filters?: Omit<CashierOrderFilters, "page" | "limit">
+): Promise<CashierOrdersSummary> => {
+  const match = buildCashierOrdersQuery(cashierId, filters);
+
+  const rows = await Order.aggregate<{
+    _id: OrderStatus;
+    count: number;
+    total: number;
+  }>([
+    { $match: match },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+  ]);
+
+  const byStatus: CashierOrdersSummary["byStatus"] = {};
+  let totalOrders = 0;
+  let totalAmount = 0;
+
+  for (const row of rows) {
+    const count = row.count || 0;
+    const total = row.total || 0;
+    byStatus[row._id] = { count, total };
+    totalOrders += count;
+    totalAmount += total;
+  }
+
+  return { totalOrders, totalAmount, byStatus };
+};
+
+export const getOrdersByCashier = async (
+  cashierId: string,
+  filters?: CashierOrderFilters
+): Promise<PaginatedResponse<OrderDoc>> => {
+  const query = buildCashierOrdersQuery(cashierId, filters);
+  const page = filters?.page || 1;
+  const limit = filters?.limit || 20;
+  const skip = (page - 1) * limit;
 
   const [orders, totalCount] = await Promise.all([
     Order.find(query)
@@ -1077,7 +1216,8 @@ export async function printOrder(orderId: string): Promise<{ order: OrderDoc; re
 
 export const cancelOrder = async (
   id: string,
-  userId: string
+  userId: string,
+  pin?: string
 ): Promise<OrderDoc | null> => {
   const order = await Order.findById(id);
 
@@ -1097,6 +1237,8 @@ export const cancelOrder = async (
       message: "Only cashiers can cancel orders",
     };
   }
+
+  await assertSecurityPin("void", pin);
 
   // Only cashier who created the order can cancel
   if (order.cashierId?.toString() !== userId) {

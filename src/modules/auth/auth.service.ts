@@ -154,7 +154,11 @@ export const resetStaffPassword = async (
     throw { status: 403, message: "Cannot reset owner password" };
   }
 
-  if (staff.role !== "cashier" && staff.role !== "waiter") {
+  if (
+    staff.role !== "cashier" &&
+    staff.role !== "waiter" &&
+    staff.role !== "barman"
+  ) {
     throw { status: 400, message: "User is not a staff member" };
   }
 

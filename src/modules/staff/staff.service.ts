@@ -2,12 +2,21 @@ import { hashPassword } from "../../common/utils/password";
 import { Role } from "../../constants/roles";
 import { User, UserDoc } from "../auth/user.model";
 
+const STAFF_ROLES = ["cashier", "waiter", "staff", "barman"] as const;
+type StaffRole = (typeof STAFF_ROLES)[number];
+
+const isStaffRole = (role: string): role is StaffRole =>
+  (STAFF_ROLES as readonly string[]).includes(role);
+
+const isLoginStaffRole = (role: string) =>
+  role === "cashier" || role === "waiter" || role === "barman";
+
 export interface CreateStaffInput {
   name: string;
   email?: string;
   password?: string;
   phone?: string;
-  role: "cashier" | "waiter" | "staff";
+  role: StaffRole;
   salary: number;
   color?: string;
 }
@@ -15,7 +24,7 @@ export interface CreateStaffInput {
 export interface UpdateStaffInput {
   phone?: string;
   salary?: number;
-  role?: "cashier" | "waiter" | "staff";
+  role?: StaffRole;
   color?: string;
 }
 
@@ -29,11 +38,11 @@ export interface ListStaffFilters {
 export const listStaff = async (filters: ListStaffFilters = {}) => {
   const { role, search, page = 1, limit = 50 } = filters;
   const query: any = {
-    role: { $in: ["cashier", "waiter", "staff"] }, // Only staff roles
-    isDeleted: { $ne: true }, // Exclude soft-deleted staff
+    role: { $in: [...STAFF_ROLES] },
+    isDeleted: { $ne: true },
   };
 
-  if (role && (role === "cashier" || role === "waiter" || role === "staff")) {
+  if (role && isStaffRole(role)) {
     query.role = role;
   }
 
@@ -81,12 +90,7 @@ export const getStaffById = async (id: string): Promise<UserDoc | null> => {
     return null;
   }
 
-  // Validate it's a staff member (cashier, waiter, or staff)
-  if (
-    staff.role !== "cashier" &&
-    staff.role !== "waiter" &&
-    staff.role !== "staff"
-  ) {
+  if (!isStaffRole(staff.role)) {
     throw new Error("User is not a staff member");
   }
 
@@ -96,7 +100,6 @@ export const getStaffById = async (id: string): Promise<UserDoc | null> => {
 export const createStaff = async (
   data: CreateStaffInput & { clientId?: string },
 ): Promise<UserDoc> => {
-  // Check for idempotency if clientId provided
   if (data.clientId) {
     const existing = await User.findOne({ clientId: data.clientId });
     if (existing) {
@@ -104,35 +107,27 @@ export const createStaff = async (
     }
   }
 
-  // Validate role
-  if (
-    data.role !== "cashier" &&
-    data.role !== "waiter" &&
-    data.role !== "staff"
-  ) {
-    throw { status: 400, message: "Role must be cashier, waiter, or staff" };
-  }
-
-  // Password is required for cashier and waiter roles
-  if ((data.role === "cashier" || data.role === "waiter") && !data.password) {
+  if (!isStaffRole(data.role)) {
     throw {
       status: 400,
-      message: "Password is required for cashier and waiter roles",
+      message: "Role must be cashier, waiter, staff, or barman",
     };
   }
 
-  // Phone is required for cashier and waiter roles
-  if (
-    (data.role === "cashier" || data.role === "waiter") &&
-    (!data.phone || !data.phone.trim())
-  ) {
+  if (isLoginStaffRole(data.role) && !data.password) {
     throw {
       status: 400,
-      message: "Phone is required for cashier and waiter roles",
+      message: "Password is required for cashier, waiter, and barman roles",
     };
   }
 
-  // Check if email exists (only if email is provided)
+  if (isLoginStaffRole(data.role) && (!data.phone || !data.phone.trim())) {
+    throw {
+      status: 400,
+      message: "Phone is required for cashier, waiter, and barman roles",
+    };
+  }
+
   if (data.email && data.email.trim()) {
     const existingEmail = await User.findOne({
       email: data.email.toLowerCase().trim(),
@@ -142,7 +137,6 @@ export const createStaff = async (
     }
   }
 
-  // Check if phone exists (only if phone is provided)
   if (data.phone && data.phone.trim()) {
     const existingPhone = await User.findOne({ phone: data.phone.trim() });
     if (existingPhone) {
@@ -150,19 +144,16 @@ export const createStaff = async (
     }
   }
 
-  // Hash password only if provided (required for cashier/waiter, optional for staff)
   let hashedPassword: string | undefined;
   if (data.password && data.password.trim()) {
     hashedPassword = await hashPassword(data.password);
-  } else if (data.role === "cashier" || data.role === "waiter") {
-    // This should not happen due to validation above, but double-check
+  } else if (isLoginStaffRole(data.role)) {
     throw {
       status: 400,
-      message: "Password is required for cashier and waiter roles",
+      message: "Password is required for cashier, waiter, and barman roles",
     };
   }
 
-  // Build user object
   const userData: any = {
     name: data.name,
     role: data.role,
@@ -174,22 +165,17 @@ export const createStaff = async (
     userData.color = data.color || undefined;
   }
 
-  // Add email if provided
   if (data.email && data.email.trim()) {
     userData.email = data.email.toLowerCase().trim();
   }
 
-  // Add phone if provided
   if (data.phone && data.phone.trim()) {
     userData.phone = data.phone.trim();
   }
 
-  // Add password if provided (required for cashier/waiter, optional for staff)
   if (hashedPassword) {
     userData.password = hashedPassword;
   } else if (data.role === "staff") {
-    // For staff role, generate a random password that won't be used for login
-    // This satisfies the required password field in the schema
     userData.password = await hashPassword(
       `staff_${Date.now()}_${Math.random()}`,
     );
@@ -213,26 +199,17 @@ export const updateStaff = async (
     throw { status: 404, message: "Staff member not found" };
   }
 
-  // Validate it's a staff member
-  if (
-    staff.role !== "cashier" &&
-    staff.role !== "waiter" &&
-    staff.role !== "staff"
-  ) {
+  if (!isStaffRole(staff.role)) {
     throw { status: 400, message: "User is not a staff member" };
   }
 
-  // Validate role if provided
-  if (
-    data.role &&
-    data.role !== "cashier" &&
-    data.role !== "waiter" &&
-    data.role !== "staff"
-  ) {
-    throw { status: 400, message: "Role must be cashier, waiter, or staff" };
+  if (data.role && !isStaffRole(data.role)) {
+    throw {
+      status: 400,
+      message: "Role must be cashier, waiter, staff, or barman",
+    };
   }
 
-  // Check phone uniqueness if updating
   if (data.phone && data.phone !== staff.phone) {
     const existingPhone = await User.findOne({ phone: data.phone });
     if (existingPhone) {
@@ -265,22 +242,14 @@ export const deleteStaff = async (id: string): Promise<UserDoc | null> => {
     throw { status: 404, message: "Staff member not found" };
   }
 
-  // Validate it's a staff member
-  if (
-    staff.role !== "cashier" &&
-    staff.role !== "waiter" &&
-    staff.role !== "staff"
-  ) {
+  if (!isStaffRole(staff.role)) {
     throw { status: 400, message: "User is not a staff member" };
   }
 
-  // Hard delete
   await User.findByIdAndDelete(id);
   return staff;
 };
 
 export const getStaffAttendance = async (id: string) => {
-  // Optional: Return attendance records
-  // This can be implemented later if attendance tracking is needed
   return null;
 };
