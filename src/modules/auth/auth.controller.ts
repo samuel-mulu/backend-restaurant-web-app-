@@ -74,12 +74,22 @@ export const createStaff = async (
       return;
     }
 
-    // Ensure only cashier or waiter roles can be created
-    if (role && role !== "cashier" && role !== "waiter") {
+    // Ensure only login-capable staff roles can be created via this endpoint
+    if (
+      role &&
+      role !== "cashier" &&
+      role !== "waiter" &&
+      role !== "barman"
+    ) {
       res.status(403).json({
         success: false,
         message: "Access denied",
-        details: [{ message: "Only cashier and waiter roles can be created" }],
+        details: [
+          {
+            message:
+              "Only cashier, waiter, and barman roles can be created via this endpoint",
+          },
+        ],
       });
       return;
     }
