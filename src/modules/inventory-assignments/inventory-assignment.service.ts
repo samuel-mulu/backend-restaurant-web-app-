@@ -30,21 +30,26 @@ export interface ListAssignmentsFilters {
   viewerId?: string;
 }
 
+const populateRef = (value: any) => {
+  if (!value) return value;
+  // Keep populated documents as objects with readable fields
+  if (typeof value === "object" && (value.name != null || value._id != null)) {
+    const id = value._id?.toString?.() || value.id || undefined;
+    return {
+      ...value,
+      id,
+      _id: id,
+    };
+  }
+  return value?.toString?.() || value;
+};
+
 const toResponse = (doc: any) => ({
   ...doc,
   id: doc._id?.toString() || doc.id,
-  inventoryId:
-    doc.inventoryId?._id?.toString?.() ||
-    doc.inventoryId?.toString?.() ||
-    doc.inventoryId,
-  barmanId:
-    doc.barmanId?._id?.toString?.() ||
-    doc.barmanId?.toString?.() ||
-    doc.barmanId,
-  assignedBy:
-    doc.assignedBy?._id?.toString?.() ||
-    doc.assignedBy?.toString?.() ||
-    doc.assignedBy,
+  inventoryId: populateRef(doc.inventoryId),
+  barmanId: populateRef(doc.barmanId),
+  assignedBy: populateRef(doc.assignedBy),
 });
 
 export const createAssignment = async (
