@@ -950,24 +950,25 @@ export const getOrdersByWaiter = async (
     .populate("disputedBy", "name email phone");
 };
 
-export const getOrdersByCashier = async (
-  cashierId: string,
-  filters?: {
-    status?: OrderStatus | OrderStatus[];
-    waiterId?: string;
-    startDate?: Date;
-    endDate?: Date;
-    page?: number;
-    limit?: number;
-    search?: string;
-  }
-): Promise<PaginatedResponse<OrderDoc>> => {
-  const query: any = { cashierId: new Types.ObjectId(cashierId) };
-  const page = filters?.page || 1;
-  const limit = filters?.limit || 20;
-  const skip = (page - 1) * limit;
+type CashierOrderFilters = {
+  status?: OrderStatus | OrderStatus[];
+  waiterId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  page?: number;
+  limit?: number;
+  search?: string;
+};
 
-  // Add status filter if provided (supports single status or array of statuses)
+/** Shared match query for cashier list + summary (pagination not applied here). */
+const buildCashierOrdersQuery = (
+  cashierId: string,
+  filters?: Omit<CashierOrderFilters, "page" | "limit">
+): Record<string, unknown> => {
+  const query: Record<string, unknown> = {
+    cashierId: new Types.ObjectId(cashierId),
+  };
+
   if (filters?.status) {
     if (Array.isArray(filters.status)) {
       query.status = { $in: filters.status };
@@ -976,29 +977,25 @@ export const getOrdersByCashier = async (
     }
   }
 
-  // Add waiter filter if provided
   if (filters?.waiterId) {
     query.waiterId = new Types.ObjectId(filters.waiterId);
   }
 
-  // Add date range filter if provided
   if (filters?.startDate || filters?.endDate) {
-    query.createdAt = {};
+    const createdAt: { $gte?: Date; $lte?: Date } = {};
     if (filters.startDate) {
-      // Ensure startDate is at beginning of day
       const start = new Date(filters.startDate);
       start.setHours(0, 0, 0, 0);
-      query.createdAt.$gte = start;
+      createdAt.$gte = start;
     }
     if (filters.endDate) {
-      // Ensure endDate is at end of day (23:59:59.999)
       const end = new Date(filters.endDate);
       end.setHours(23, 59, 59, 999);
-      query.createdAt.$lte = end;
+      createdAt.$lte = end;
     }
+    query.createdAt = createdAt;
   }
 
-  // Add search filter if provided
   if (filters?.search && filters.search.trim()) {
     const searchTerm = filters.search.trim();
     const searchRegex = { $regex: searchTerm, $options: "i" };
@@ -1007,6 +1004,63 @@ export const getOrdersByCashier = async (
       { tableNumber: searchRegex },
     ];
   }
+
+  return query;
+};
+
+export type CashierOrdersSummary = {
+  totalOrders: number;
+  totalAmount: number;
+  byStatus: Partial<
+    Record<OrderStatus, { count: number; total: number }>
+  >;
+};
+
+/** Counts/sums for all orders matching filters (ignores pagination). */
+export const getOrdersByCashierSummary = async (
+  cashierId: string,
+  filters?: Omit<CashierOrderFilters, "page" | "limit">
+): Promise<CashierOrdersSummary> => {
+  const match = buildCashierOrdersQuery(cashierId, filters);
+
+  const rows = await Order.aggregate<{
+    _id: OrderStatus;
+    count: number;
+    total: number;
+  }>([
+    { $match: match },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+  ]);
+
+  const byStatus: CashierOrdersSummary["byStatus"] = {};
+  let totalOrders = 0;
+  let totalAmount = 0;
+
+  for (const row of rows) {
+    const count = row.count || 0;
+    const total = row.total || 0;
+    byStatus[row._id] = { count, total };
+    totalOrders += count;
+    totalAmount += total;
+  }
+
+  return { totalOrders, totalAmount, byStatus };
+};
+
+export const getOrdersByCashier = async (
+  cashierId: string,
+  filters?: CashierOrderFilters
+): Promise<PaginatedResponse<OrderDoc>> => {
+  const query = buildCashierOrdersQuery(cashierId, filters);
+  const page = filters?.page || 1;
+  const limit = filters?.limit || 20;
+  const skip = (page - 1) * limit;
 
   const [orders, totalCount] = await Promise.all([
     Order.find(query)
