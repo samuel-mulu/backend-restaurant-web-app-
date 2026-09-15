@@ -5,10 +5,9 @@ import {
 } from "../../common/utils/dateUtils";
 import { Request, Response } from "express";
 import * as reportService from "./report.service";
+import { ReportItemType } from "./report.service";
 
-const parseStatusQuery = (
-  statusParam: unknown,
-): string[] | undefined => {
+const parseStatusQuery = (statusParam: unknown): string[] | undefined => {
   if (!statusParam || typeof statusParam !== "string") return undefined;
   const statuses = statusParam
     .split(",")
@@ -17,16 +16,26 @@ const parseStatusQuery = (
   return statuses.length > 0 ? statuses : undefined;
 };
 
+const parseItemType = (itemTypeParam: unknown): ReportItemType | undefined => {
+  if (itemTypeParam === "menu" || itemTypeParam === "inventory") {
+    return itemTypeParam;
+  }
+  return undefined;
+};
+
+const parseExpenseType = (
+  expenseType: unknown,
+): "cash" | "mobile_banking" | undefined =>
+  expenseType === "cash" || expenseType === "mobile_banking"
+    ? expenseType
+    : undefined;
+
 export const getDailyReport = async (req: Request, res: Response) => {
   try {
-    const { date, status, expenseType } = req.query;
+    const { date, status, expenseType, itemType } = req.query;
     const dateStr =
       date && typeof date === "string" ? date : formatDateLocal(new Date());
     const statusFilter = parseStatusQuery(status);
-    const expenseTypeFilter =
-      expenseType === "cash" || expenseType === "mobile_banking"
-        ? (expenseType as "cash" | "mobile_banking")
-        : undefined;
 
     const startDate = parseStartOfDay(dateStr);
     const endDate = parseEndOfDay(dateStr);
@@ -35,7 +44,8 @@ export const getDailyReport = async (req: Request, res: Response) => {
       startDate,
       endDate,
       statusFilter,
-      expenseTypeFilter,
+      parseExpenseType(expenseType),
+      parseItemType(itemType),
     );
     res.json({ success: true, data: report });
   } catch (error: any) {
@@ -45,15 +55,11 @@ export const getDailyReport = async (req: Request, res: Response) => {
 
 export const getMonthlyReport = async (req: Request, res: Response) => {
   try {
-    const { year, month, status, expenseType } = req.query; // Expecting strings
+    const { year, month, status, expenseType, itemType } = req.query;
     const now = new Date();
     const targetYear = year ? parseInt(year as string) : now.getFullYear();
     const targetMonth = month ? parseInt(month as string) - 1 : now.getMonth();
     const statusFilter = parseStatusQuery(status);
-    const expenseTypeFilter =
-      expenseType === "cash" || expenseType === "mobile_banking"
-        ? (expenseType as "cash" | "mobile_banking")
-        : undefined;
 
     const startDate = new Date(targetYear, targetMonth, 1);
     const endDate = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
@@ -62,7 +68,47 @@ export const getMonthlyReport = async (req: Request, res: Response) => {
       startDate,
       endDate,
       statusFilter,
-      expenseTypeFilter,
+      parseExpenseType(expenseType),
+      parseItemType(itemType),
+    );
+    res.json({ success: true, data: report });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const getRangeReport = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, status, expenseType, itemType } = req.query;
+
+    if (
+      !startDate ||
+      !endDate ||
+      typeof startDate !== "string" ||
+      typeof endDate !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "startDate and endDate are required and must be valid dates",
+      });
+    }
+
+    const parsedStartDate = parseStartOfDay(startDate);
+    const parsedEndDate = parseEndOfDay(endDate);
+
+    if (parsedStartDate > parsedEndDate) {
+      return res.status(400).json({
+        success: false,
+        message: "startDate must be on or before endDate",
+      });
+    }
+
+    const report = await reportService.getReportData(
+      parsedStartDate,
+      parsedEndDate,
+      parseStatusQuery(status),
+      parseExpenseType(expenseType),
+      parseItemType(itemType),
     );
     res.json({ success: true, data: report });
   } catch (error: any) {
@@ -72,8 +118,15 @@ export const getMonthlyReport = async (req: Request, res: Response) => {
 
 export const getStaffOrderDetails = async (req: Request, res: Response) => {
   try {
-    const { staffType, staffId, startDate, endDate, status, paymentMethod } =
-      req.query;
+    const {
+      staffType,
+      staffId,
+      startDate,
+      endDate,
+      status,
+      paymentMethod,
+      itemType,
+    } = req.query;
 
     if (staffType !== "waiter" && staffType !== "cashier") {
       return res.status(400).json({
@@ -89,7 +142,12 @@ export const getStaffOrderDetails = async (req: Request, res: Response) => {
       });
     }
 
-    if (!startDate || !endDate || typeof startDate !== "string" || typeof endDate !== "string") {
+    if (
+      !startDate ||
+      !endDate ||
+      typeof startDate !== "string" ||
+      typeof endDate !== "string"
+    ) {
       return res.status(400).json({
         success: false,
         message: "startDate and endDate are required and must be valid dates",
@@ -112,6 +170,7 @@ export const getStaffOrderDetails = async (req: Request, res: Response) => {
       endDate: parsedEndDate,
       statuses,
       paymentMethod: normalizedPaymentMethod,
+      itemType: parseItemType(itemType),
     });
 
     res.json({ success: true, data });

@@ -10,12 +10,14 @@ import orderRoutes from "./orders/order.routes";
 import ownerRoutes from "./owner/owner.routes";
 import reportRoutes from "./reports/report.routes";
 import salaryRoutes from "./salary/salary.routes";
+import settingsRoutes from "./settings/settings.routes";
 import shiftsRoutes from "./shifts/shifts.routes";
 import staffRoutes from "./staff/staff.routes";
 import statisticsRoutes from "./statistics/statistics.routes";
 import syncRoutes from "./sync/sync.routes";
-import tableNotificationsRoutes from "./table-notifications/table-notification.routes";
+import waiterRoutes from "./waiter/waiter.routes";
 import tableRoutes from "./tables/table.routes";
+import tableNotificationsRoutes from "./table-notifications/table-notification.routes";
 
 const router = Router();
 
@@ -35,6 +37,8 @@ router.use("/owner", ownerRoutes);
 router.use("/tables", tableRoutes);
 router.use("/expenses", expenseRoutes);
 router.use("/reports", reportRoutes);
+router.use("/settings", settingsRoutes);
+router.use("/waiter", waiterRoutes);
 router.use("/table-notifications", tableNotificationsRoutes);
 
 export default router;

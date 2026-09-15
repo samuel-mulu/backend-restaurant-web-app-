@@ -7,6 +7,7 @@ import {
 } from "../../sockets/events";
 import { User } from "../auth/user.model";
 import { Inventory } from "../inventory/inventory.model";
+import { assertSecurityPin } from "../settings/settings.service";
 import { Order, OrderDoc, OrderStatus, fixOrderCodeIndex } from "./order.model";
 
 // Helper function to populate user tracking fields
@@ -230,7 +231,7 @@ export const createOrder = async (
 };
 
 export interface ListOrdersFilters {
-  status?: OrderStatus;
+  status?: OrderStatus | OrderStatus[];
   waiterId?: string;
   cashierId?: string;
   startDate?: Date;
@@ -257,7 +258,15 @@ export const listOrders = async (
   const skip = (page - 1) * limit;
 
   if (filters.status) {
-    query.status = filters.status;
+    if (Array.isArray(filters.status)) {
+      if (filters.status.length === 1) {
+        query.status = filters.status[0];
+      } else if (filters.status.length > 1) {
+        query.status = { $in: filters.status };
+      }
+    } else {
+      query.status = filters.status;
+    }
   }
 
   if (filters.waiterId) {
@@ -367,7 +376,8 @@ export const updateOrderStatus = async (
   userId: string,
   paymentMethod?: "cash" | "mobile_banking",
   paymentProofImageFile?: Express.Multer.File,
-  paymentBankName?: string
+  paymentBankName?: string,
+  pin?: string
 ): Promise<{ order: OrderDoc; receiptText?: string } | null> => {
   const order = await Order.findById(id);
 
@@ -382,6 +392,10 @@ export const updateOrderStatus = async (
       status: 400,
       message: `Invalid status transition from ${order.status} to ${status}`,
     };
+  }
+
+  if (status === "VOIDED") {
+    await assertSecurityPin("void", pin);
   }
 
   // Validate user permissions
@@ -580,7 +594,8 @@ export const bulkUpdateOrderStatus = async (
   orderIds: string[],
   newStatus: OrderStatus,
   userId: string,
-  paymentMethod?: "cash" | "mobile_banking"
+  paymentMethod?: "cash" | "mobile_banking",
+  pin?: string
 ): Promise<{
   updated: Array<OrderDoc & { receiptText?: string }>;
   failed: Array<{ id: string; reason: string }>;
@@ -588,6 +603,10 @@ export const bulkUpdateOrderStatus = async (
 }> => {
   if (!orderIds || orderIds.length === 0) {
     throw { status: 400, message: "Order IDs are required" };
+  }
+
+  if (newStatus === "VOIDED") {
+    await assertSecurityPin("void", pin);
   }
 
   // Validate user permissions
@@ -1053,6 +1072,85 @@ export const getOrdersByCashierSummary = async (
   return { totalOrders, totalAmount, byStatus };
 };
 
+type WaiterOrderFilters = {
+  status?: OrderStatus | OrderStatus[];
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+};
+
+const buildWaiterOrdersQuery = (
+  waiterId: string,
+  filters?: WaiterOrderFilters
+): Record<string, unknown> => {
+  const query: Record<string, unknown> = {
+    waiterId: new Types.ObjectId(waiterId),
+  };
+
+  if (filters?.status) {
+    if (Array.isArray(filters.status)) {
+      if (filters.status.length === 1) {
+        query.status = filters.status[0];
+      } else if (filters.status.length > 1) {
+        query.status = { $in: filters.status };
+      }
+    } else {
+      query.status = filters.status;
+    }
+  }
+
+  if (filters?.startDate || filters?.endDate) {
+    const createdAt: Record<string, Date> = {};
+    if (filters.startDate) createdAt.$gte = filters.startDate;
+    if (filters.endDate) createdAt.$lte = filters.endDate;
+    query.createdAt = createdAt;
+  }
+
+  if (filters?.search?.trim()) {
+    const searchTerm = filters.search.trim();
+    const searchRegex = { $regex: searchTerm, $options: "i" };
+    query.$or = [{ orderNumber: searchRegex }, { tableNumber: searchRegex }];
+  }
+
+  return query;
+};
+
+export const getOrdersByWaiterSummary = async (
+  waiterId: string,
+  filters?: WaiterOrderFilters
+): Promise<CashierOrdersSummary> => {
+  const match = buildWaiterOrdersQuery(waiterId, filters);
+
+  const rows = await Order.aggregate<{
+    _id: OrderStatus;
+    count: number;
+    total: number;
+  }>([
+    { $match: match },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+  ]);
+
+  const byStatus: CashierOrdersSummary["byStatus"] = {};
+  let totalOrders = 0;
+  let totalAmount = 0;
+
+  for (const row of rows) {
+    const count = row.count || 0;
+    const total = row.total || 0;
+    byStatus[row._id] = { count, total };
+    totalOrders += count;
+    totalAmount += total;
+  }
+
+  return { totalOrders, totalAmount, byStatus };
+};
+
 export const getOrdersByCashier = async (
   cashierId: string,
   filters?: CashierOrderFilters
@@ -1131,7 +1229,8 @@ export async function printOrder(orderId: string): Promise<{ order: OrderDoc; re
 
 export const cancelOrder = async (
   id: string,
-  userId: string
+  userId: string,
+  pin?: string
 ): Promise<OrderDoc | null> => {
   const order = await Order.findById(id);
 
@@ -1151,6 +1250,8 @@ export const cancelOrder = async (
       message: "Only cashiers can cancel orders",
     };
   }
+
+  await assertSecurityPin("void", pin);
 
   // Only cashier who created the order can cancel
   if (order.cashierId?.toString() !== userId) {

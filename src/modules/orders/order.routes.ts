@@ -118,7 +118,7 @@ router.get(
   orderCtrl.printOrder
 );
 
-// Get single order details (for customers with order code or authenticated users)
-router.get("/:id", orderCtrl.getOrder);
+// Get single order details (authenticated; waiters/cashiers scoped to own orders)
+router.get("/:id", requireAuth, orderCtrl.getOrder);
 
 export default router;

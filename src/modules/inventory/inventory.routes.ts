@@ -2,9 +2,10 @@ import { Router } from "express";
 import * as inventoryCtrl from "./inventory.controller";
 import {
   requireAuth,
-  requireCashier,
   requireOwner,
+  requireRole,
 } from "../../common/middleware/authMiddleware";
+import { requireCashierResourceAccess } from "../../common/middleware/cashierPermissionMiddleware";
 
 const router = Router();
 
@@ -20,10 +21,22 @@ router.get("/pending-approvals", requireOwner, inventoryCtrl.listPendingApproval
 router.patch("/:id/approve", requireOwner, inventoryCtrl.approveInventory);
 router.patch("/:id/reject", requireOwner, inventoryCtrl.rejectInventory);
 
-// POST, PATCH, DELETE: Cashier only
-router.post("/", requireCashier, inventoryCtrl.create);
-router.patch("/:id", requireCashier, inventoryCtrl.update);
-router.delete("/:id", requireCashier, inventoryCtrl.remove);
+// Create: owner + cashier
+router.post("/", requireRole("owner", "cashier"), inventoryCtrl.create);
+
+// Update / delete: owner always; cashier when enabled in settings
+router.patch(
+  "/:id",
+  requireRole("owner", "cashier"),
+  requireCashierResourceAccess("inventory"),
+  inventoryCtrl.update
+);
+router.delete(
+  "/:id",
+  requireRole("owner", "cashier"),
+  requireCashierResourceAccess("inventory"),
+  inventoryCtrl.remove
+);
 
 // GET by ID (must come after specific routes)
 router.get("/:id", inventoryCtrl.getById);

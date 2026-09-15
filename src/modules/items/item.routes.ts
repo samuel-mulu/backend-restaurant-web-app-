@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as ctrl from "./item.controller";
 import { requireAuth, requireOwner, requireRole } from "../../common/middleware/authMiddleware";
+import { requireCashierResourceAccess } from "../../common/middleware/cashierPermissionMiddleware";
 import { uploadImageMiddleware } from "../../common/middleware/upload";
 
 const router = Router();
@@ -15,12 +16,28 @@ router.get("/unavailable", ctrl.getUnavailable);
 // requireOwner includes requireAuth, but let's be explicit
 router.get("/pending-approvals", requireAuth, requireOwner, ctrl.listPendingApprovals);
 
-// owner/cashier for mutations (hard delete requested)
+// owner/cashier for mutations — cashier edit/delete gated by owner settings
 router.post("/", requireRole("owner", "cashier"), uploadImageMiddleware.single("image"), ctrl.create as any);
-router.patch("/:id", requireRole("owner", "cashier"), uploadImageMiddleware.single("image"), ctrl.update as any);
-router.delete("/:id", requireRole("owner", "cashier"), ctrl.remove);
+router.patch(
+  "/:id",
+  requireRole("owner", "cashier"),
+  requireCashierResourceAccess("menus"),
+  uploadImageMiddleware.single("image"),
+  ctrl.update as any
+);
+router.delete(
+  "/:id",
+  requireRole("owner", "cashier"),
+  requireCashierResourceAccess("menus"),
+  ctrl.remove
+);
 router.patch("/:id/restore", requireRole("owner", "cashier"), ctrl.restore);
-router.delete("/:id/permanent", requireRole("owner", "cashier"), ctrl.permanentDelete);
+router.delete(
+  "/:id/permanent",
+  requireRole("owner", "cashier"),
+  requireCashierResourceAccess("menus"),
+  ctrl.permanentDelete
+);
 router.patch("/:id/availability", requireRole("owner", "cashier"), ctrl.availability);
 
 // Approval routes - Owner only (approve/reject must come after other /:id routes but before /:id GET)

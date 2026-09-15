@@ -2,6 +2,23 @@ import { Types } from "mongoose";
 import { Expense } from "../expenses/expense.model";
 import { Order } from "../orders/order.model";
 
+export type ReportItemType = "ALL" | "menu" | "inventory";
+
+const toItemModel = (
+  itemType?: ReportItemType,
+): "Item" | "Inventory" | undefined => {
+  if (itemType === "menu") return "Item";
+  if (itemType === "inventory") return "Inventory";
+  return undefined;
+};
+
+const lineAmountExpr = {
+  $multiply: [
+    { $ifNull: ["$items.priceSnapshot", 0] },
+    { $ifNull: ["$items.qty", 0] },
+  ],
+};
+
 // Data validation helper
 const validateReportData = (data: any) => {
   const errors: string[] = [];
@@ -41,11 +58,196 @@ const validateReportData = (data: any) => {
   return errors;
 };
 
+const orderLevelFacet: Record<string, object[]> = {
+  ordersSummary: [
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+  ],
+  salesByPaymentMethod: [
+    {
+      $group: {
+        _id: {
+          method: { $ifNull: ["$paymentMethod", "unpaid"] },
+          bank: { $ifNull: ["$paymentBankName", "-"] },
+        },
+        total: { $sum: "$totalAmount" },
+        count: { $sum: 1 },
+      },
+    },
+  ],
+  byWaiter: [
+    { $match: { waiterId: { $exists: true, $ne: null } } },
+    {
+      $group: {
+        _id: "$waiterId",
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "waiter",
+      },
+    },
+    { $unwind: "$waiter" },
+    {
+      $project: {
+        _id: "$waiter._id",
+        name: "$waiter.name",
+        count: 1,
+        total: 1,
+      },
+    },
+    { $sort: { count: -1 } },
+  ],
+  byCashier: [
+    {
+      $group: {
+        _id: { $ifNull: ["$cashierId", "$transferredToOwnerBy"] },
+        count: { $sum: 1 },
+        total: { $sum: "$totalAmount" },
+      },
+    },
+    { $match: { _id: { $ne: null } } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "cashier",
+      },
+    },
+    {
+      $unwind: {
+        path: "$cashier",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        _id: { $ifNull: ["$cashier._id", "$_id"] },
+        name: { $ifNull: ["$cashier.name", "Unknown Cashier"] },
+        count: 1,
+        total: 1,
+      },
+    },
+    { $sort: { count: -1 } },
+  ],
+};
+
+const lineItemFacet: Record<string, object[]> = {
+  ordersSummary: [
+    {
+      $group: {
+        _id: "$status",
+        orderIds: { $addToSet: "$_id" },
+        total: { $sum: "$lineAmount" },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        count: { $size: "$orderIds" },
+        total: 1,
+      },
+    },
+  ],
+  salesByPaymentMethod: [
+    {
+      $group: {
+        _id: {
+          method: { $ifNull: ["$paymentMethod", "unpaid"] },
+          bank: { $ifNull: ["$paymentBankName", "-"] },
+        },
+        orderIds: { $addToSet: "$_id" },
+        total: { $sum: "$lineAmount" },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        count: { $size: "$orderIds" },
+        total: 1,
+      },
+    },
+  ],
+  byWaiter: [
+    { $match: { waiterId: { $exists: true, $ne: null } } },
+    {
+      $group: {
+        _id: "$waiterId",
+        orderIds: { $addToSet: "$_id" },
+        total: { $sum: "$lineAmount" },
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "waiter",
+      },
+    },
+    { $unwind: "$waiter" },
+    {
+      $project: {
+        _id: "$waiter._id",
+        name: "$waiter.name",
+        count: { $size: "$orderIds" },
+        total: 1,
+      },
+    },
+    { $sort: { count: -1 } },
+  ],
+  byCashier: [
+    {
+      $group: {
+        _id: { $ifNull: ["$cashierId", "$transferredToOwnerBy"] },
+        orderIds: { $addToSet: "$_id" },
+        total: { $sum: "$lineAmount" },
+      },
+    },
+    { $match: { _id: { $ne: null } } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "cashier",
+      },
+    },
+    {
+      $unwind: {
+        path: "$cashier",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        _id: { $ifNull: ["$cashier._id", "$_id"] },
+        name: { $ifNull: ["$cashier.name", "Unknown Cashier"] },
+        count: { $size: "$orderIds" },
+        total: 1,
+      },
+    },
+    { $sort: { count: -1 } },
+  ],
+};
+
 export const getReportData = async (
   startDate: Date,
   endDate: Date,
   statuses?: string[],
   expenseType?: "cash" | "mobile_banking",
+  itemType?: ReportItemType,
 ) => {
   const normalizedStatuses =
     statuses && statuses.length > 0 ? statuses.filter(Boolean) : undefined;
@@ -74,110 +276,47 @@ export const getReportData = async (
     }
   }
 
+  const itemModel = toItemModel(itemType);
+  const useLineItems = Boolean(itemModel);
+
   try {
+    const reportPromise = useLineItems
+      ? Order.aggregate([
+          { $match: matchQuery },
+          { $unwind: "$items" },
+          { $match: { "items.itemModel": itemModel } },
+          { $addFields: { lineAmount: lineAmountExpr } },
+          { $facet: lineItemFacet as any },
+        ])
+      : Order.aggregate([
+          { $match: matchQuery },
+          { $facet: orderLevelFacet as any },
+        ]);
+
+    const expensesPromise = useLineItems
+      ? Promise.resolve([])
+      : Expense.aggregate([
+          { $match: expenseQuery },
+          {
+            $group: {
+              _id: "$reason",
+              total: { $sum: "$amount" },
+              items: { $push: "$$ROOT" },
+            },
+          },
+        ]);
+
     const [reportRaw, expenses] = await Promise.all([
-      Order.aggregate([
-        { $match: matchQuery },
-        {
-          $facet: {
-            ordersSummary: [
-              {
-                $group: {
-                  _id: "$status",
-                  count: { $sum: 1 },
-                  total: { $sum: "$totalAmount" },
-                },
-              },
-            ],
-            salesByPaymentMethod: [
-              {
-                $group: {
-                  _id: {
-                    method: { $ifNull: ["$paymentMethod", "unpaid"] },
-                    bank: { $ifNull: ["$paymentBankName", "-"] },
-                  },
-                  total: { $sum: "$totalAmount" },
-                  count: { $sum: 1 },
-                },
-              },
-            ],
-            byWaiter: [
-              { $match: { waiterId: { $exists: true, $ne: null } } },
-              {
-                $group: {
-                  _id: "$waiterId",
-                  count: { $sum: 1 },
-                  total: { $sum: "$totalAmount" },
-                },
-              },
-              {
-                $lookup: {
-                  from: "users",
-                  localField: "_id",
-                  foreignField: "_id",
-                  as: "waiter",
-                },
-              },
-              { $unwind: "$waiter" },
-              {
-                $project: {
-                  _id: "$waiter._id",
-                  name: "$waiter.name",
-                  count: 1,
-                  total: 1,
-                },
-              },
-              { $sort: { count: -1 } },
-            ],
-            byCashier: [
-              {
-                $group: {
-                  _id: { $ifNull: ["$cashierId", "$transferredToOwnerBy"] },
-                  count: { $sum: 1 },
-                  total: { $sum: "$totalAmount" },
-                },
-              },
-              { $match: { _id: { $ne: null } } },
-              {
-                $lookup: {
-                  from: "users",
-                  localField: "_id",
-                  foreignField: "_id",
-                  as: "cashier",
-                },
-              },
-              {
-                $unwind: {
-                  path: "$cashier",
-                  preserveNullAndEmptyArrays: true,
-                },
-              },
-              {
-                $project: {
-                  _id: { $ifNull: ["$cashier._id", "$_id"] },
-                  name: { $ifNull: ["$cashier.name", "Unknown Cashier"] },
-                  count: 1,
-                  total: 1,
-                },
-              },
-              { $sort: { count: -1 } },
-            ],
-          },
-        },
-      ]),
-      Expense.aggregate([
-        { $match: expenseQuery },
-        {
-          $group: {
-            _id: "$reason",
-            total: { $sum: "$amount" },
-            items: { $push: "$$ROOT" },
-          },
-        },
-      ]),
+      reportPromise,
+      expensesPromise,
     ]);
 
-    const result = reportRaw[0];
+    const result = reportRaw[0] || {
+      ordersSummary: [],
+      salesByPaymentMethod: [],
+      byWaiter: [],
+      byCashier: [],
+    };
     const reportData = {
       orders: result.ordersSummary,
       expenses,
@@ -228,9 +367,17 @@ export const getStaffOrderDetails = async (params: {
   endDate: Date;
   statuses?: string[];
   paymentMethod?: string;
+  itemType?: ReportItemType;
 }): Promise<StaffOrderDetail[]> => {
-  const { staffType, staffId, startDate, endDate, statuses, paymentMethod } =
-    params;
+  const {
+    staffType,
+    staffId,
+    startDate,
+    endDate,
+    statuses,
+    paymentMethod,
+    itemType,
+  } = params;
 
   const query: any = {
     createdAt: { $gte: startDate, $lte: endDate },
@@ -245,7 +392,7 @@ export const getStaffOrderDetails = async (params: {
       query.$or = [
         { paymentMethod: { $exists: false } },
         { paymentMethod: null },
-        { paymentMethod: "" }
+        { paymentMethod: "" },
       ];
     } else {
       query.paymentMethod = paymentMethod;
@@ -256,28 +403,50 @@ export const getStaffOrderDetails = async (params: {
   if (staffType === "waiter") {
     query.waiterId = staffObjectId;
   } else {
-    query.$or = [{ cashierId: staffObjectId }, { transferredToOwnerBy: staffObjectId }];
+    query.$or = [
+      { cashierId: staffObjectId },
+      { transferredToOwnerBy: staffObjectId },
+    ];
   }
+
+  const itemModel = toItemModel(itemType);
 
   const orders = await Order.find(query)
     .sort({ createdAt: -1 })
-    .select("orderNumber createdAt status paymentMethod totalAmount tableNumber items")
+    .select(
+      "orderNumber createdAt status paymentMethod totalAmount tableNumber items",
+    )
     .lean();
 
-  return orders.map((order: any) => ({
-    _id: String(order._id),
-    orderNumber: order.orderNumber || "",
-    createdAt: order.createdAt,
-    status: order.status,
-    paymentMethod: order.paymentMethod,
-    totalAmount: order.totalAmount || 0,
-    tableNumber: order.tableNumber,
-    items: Array.isArray(order.items)
-      ? order.items.map((item: any) => ({
+  return orders
+    .map((order: any) => {
+      const rawItems = Array.isArray(order.items) ? order.items : [];
+      const filteredItems = itemModel
+        ? rawItems.filter((item: any) => item.itemModel === itemModel)
+        : rawItems;
+
+      const totalAmount = itemModel
+        ? filteredItems.reduce(
+            (sum: number, item: any) =>
+              sum + (item.priceSnapshot || 0) * (item.qty || 0),
+            0,
+          )
+        : order.totalAmount || 0;
+
+      return {
+        _id: String(order._id),
+        orderNumber: order.orderNumber || "",
+        createdAt: order.createdAt,
+        status: order.status,
+        paymentMethod: order.paymentMethod,
+        totalAmount,
+        tableNumber: order.tableNumber,
+        items: filteredItems.map((item: any) => ({
           name: item.nameSnapshot || "Item",
           quantity: item.qty || 0,
           price: item.priceSnapshot || 0,
-        }))
-      : [],
-  }));
+        })),
+      };
+    })
+    .filter((order) => (itemModel ? order.items.length > 0 : true));
 };

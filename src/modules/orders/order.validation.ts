@@ -83,4 +83,7 @@ export const updateOrderStatusSchema = Joi.object({
       "DISPUTED"
     )
     .required(),
+  pin: Joi.string().optional(),
+  paymentMethod: Joi.string().valid("cash", "mobile_banking").optional(),
+  paymentBankName: Joi.string().optional(),
 });

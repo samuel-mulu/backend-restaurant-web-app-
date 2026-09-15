@@ -98,12 +98,43 @@ export const getOwnerHistory = async (req: Request, res: Response) => {
   }
 };
 
+const refId = (value: unknown): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const v = value as { _id?: unknown; id?: unknown };
+    if (v._id) return String(v._id);
+    if (v.id) return String(v.id);
+  }
+  return String(value);
+};
+
 export const getOrder = async (req: Request, res: Response) => {
   try {
     const order = await orderService.getOrder(req.params.id);
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
+
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    if (user.role !== "owner") {
+      const waiterId = refId(order.waiterId);
+      const cashierId = refId(order.cashierId);
+      const canRead =
+        (user.role === "waiter" && waiterId === user._id) ||
+        (user.role === "cashier" && cashierId === user._id);
+
+      if (!canRead) {
+        return res.status(403).json({
+          error: "You can only access your own orders",
+        });
+      }
+    }
+
     res.json(order);
   } catch (error) {
     console.error("Error getting order:", error);
@@ -135,6 +166,7 @@ export const updateStatus = async (req: Request, res: Response) => {
 
     // Extract payment bank name if provided
     const paymentBankName = req.body.paymentBankName;
+    const pin = req.body.pin;
 
     // Get payment proof image file if provided (from multer)
     const paymentProofImageFile = req.file;
@@ -145,7 +177,8 @@ export const updateStatus = async (req: Request, res: Response) => {
       req.user._id,
       paymentMethod,
       paymentProofImageFile,
-      paymentBankName
+      paymentBankName,
+      pin
     );
 
     if (!result) {
@@ -172,7 +205,7 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const { orderIds, status, paymentMethod } = req.body;
+    const { orderIds, status, paymentMethod, pin } = req.body;
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
       return res.status(400).json({ error: "Order IDs array is required" });
     }
@@ -184,7 +217,8 @@ export const bulkUpdateStatus = async (req: Request, res: Response) => {
       orderIds,
       status,
       req.user._id,
-      paymentMethod
+      paymentMethod,
+      pin
     );
 
     res.json({
@@ -225,7 +259,16 @@ export const update = async (req: Request, res: Response) => {
 
 export const getByWaiter = async (req: Request, res: Response) => {
   try {
-    const orders = await orderService.getOrdersByWaiter(req.params.waiterId);
+    const { waiterId } = req.params;
+    const user = req.user;
+
+    if (user?.role !== "owner" && user?._id?.toString() !== waiterId) {
+      return res.status(403).json({
+        error: "You can only access your own waiter orders",
+      });
+    }
+
+    const orders = await orderService.getOrdersByWaiter(waiterId);
     res.json(orders);
   } catch (error) {
     console.error("Error getting orders by waiter:", error);
@@ -356,7 +399,11 @@ export const cancel = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const order = await orderService.cancelOrder(req.params.id, req.user._id);
+    const order = await orderService.cancelOrder(
+      req.params.id,
+      req.user._id,
+      req.body.pin
+    );
     res.json({ success: true, data: order });
   } catch (error: any) {
     console.error("Error cancelling order:", error);
