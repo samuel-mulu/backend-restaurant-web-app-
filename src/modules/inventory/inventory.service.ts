@@ -75,7 +75,19 @@ export const listInventory = async (filters: ListInventoryFilters = {}) => {
       {
         $group: {
           _id: "$inventoryId",
-          availableQuantity: { $sum: "$remainingQuantity" },
+          availableQuantity: {
+            $sum: {
+              $max: [
+                0,
+                {
+                  $subtract: [
+                    "$remainingQuantity",
+                    { $ifNull: ["$committedQuantity", 0] },
+                  ],
+                },
+              ],
+            },
+          },
         },
       },
     ]);

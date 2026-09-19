@@ -10,6 +10,51 @@ import { Inventory } from "../inventory/inventory.model";
 import { assertSecurityPin } from "../settings/settings.service";
 import { Order, OrderDoc, OrderStatus, fixOrderCodeIndex } from "./order.model";
 
+const getBarmanInventoryQuantities = async (
+  order: { items: Array<{ itemId: unknown; itemModel?: string; qty: number }> }
+): Promise<Map<string, number>> => {
+  const result = new Map<string, number>();
+  const inventoryItemIds: string[] = [];
+
+  for (const item of order.items) {
+    if (item.itemModel === "Inventory") {
+      inventoryItemIds.push(String(item.itemId));
+    }
+  }
+
+  if (inventoryItemIds.length === 0) return result;
+
+  const inventories = await Inventory.find({
+    _id: { $in: inventoryItemIds },
+    isBarman: true,
+  }).select("_id");
+
+  const barmanIds = new Set(inventories.map((inv) => inv._id.toString()));
+
+  for (const item of order.items) {
+    if (item.itemModel !== "Inventory") continue;
+    const id = String(item.itemId);
+    if (barmanIds.has(id)) {
+      result.set(id, (result.get(id) || 0) + item.qty);
+    }
+  }
+
+  return result;
+};
+
+const releaseBarmanReservationsForOrder = async (
+  order: { items: Array<{ itemId: unknown; itemModel?: string; qty: number }> },
+  session?: mongoose.ClientSession
+): Promise<void> => {
+  const { releaseAssignmentReservation } = await import(
+    "../inventory-assignments/inventory-assignment.service"
+  );
+  const barmanQtys = await getBarmanInventoryQuantities(order);
+  for (const [inventoryId, qty] of barmanQtys) {
+    await releaseAssignmentReservation(inventoryId, qty, session);
+  }
+};
+
 // Helper function to populate user tracking fields
 const populateUserTrackingFields = async (order: OrderDoc): Promise<void> => {
   await order.populate("cancelledBy", "name email phone");
@@ -213,16 +258,21 @@ export const createOrder = async (
     );
     order = created;
 
-    // Atomic inventory decrement - prevents overselling under concurrent requests
     const {
-      decrementAssignmentRemaining,
+      reserveAssignmentRemaining,
+      settleAssignmentSale,
     } = await import(
       "../inventory-assignments/inventory-assignment.service"
     );
 
+    const shouldSettleImmediately =
+      initialStatus === "PAID_TO_CASHIER" ||
+      initialStatus === "TRANSFERRED_TO_OWNER";
+    const soldAt = paymentReceivedAt || now;
+
     for (const { inventory, qty, isBarman } of inventoryItemsToUpdate) {
       if (isBarman) {
-        await decrementAssignmentRemaining(
+        await reserveAssignmentRemaining(
           inventory._id.toString(),
           qty,
           session
@@ -240,6 +290,10 @@ export const createOrder = async (
           };
         }
       }
+    }
+
+    if (shouldSettleImmediately) {
+      await settleAssignmentSale(order, soldAt, session);
     }
 
     await session.commitTransaction();
@@ -509,10 +563,27 @@ export const updateOrderStatus = async (
     }
   }
 
-  // Set status, corresponding timestamp, and user tracking
-  order.status = status;
+  const previousStatus = order.status;
   const now = new Date();
   const userIdObjectId = new Types.ObjectId(userId);
+
+  if (status === "VOIDED" && previousStatus === "OPEN") {
+    await releaseBarmanReservationsForOrder(order);
+  }
+
+  if (
+    status === "PAID_TO_CASHIER" ||
+    (status === "TRANSFERRED_TO_OWNER" &&
+      (previousStatus === "OPEN" || previousStatus === "DISPUTED"))
+  ) {
+    const { settleAssignmentSale } = await import(
+      "../inventory-assignments/inventory-assignment.service"
+    );
+    await settleAssignmentSale(order, now);
+  }
+
+  // Set status, corresponding timestamp, and user tracking
+  order.status = status;
 
   // Handle payment method and proof image for PAID_TO_CASHIER status
   if (status === "PAID_TO_CASHIER") {
@@ -769,6 +840,23 @@ export const bulkUpdateOrderStatus = async (
         continue;
       }
 
+      const previousStatus = order.status;
+
+      if (newStatus === "VOIDED" && previousStatus === "OPEN") {
+        await releaseBarmanReservationsForOrder(order);
+      }
+
+      if (
+        newStatus === "PAID_TO_CASHIER" ||
+        (newStatus === "TRANSFERRED_TO_OWNER" &&
+          (previousStatus === "OPEN" || previousStatus === "DISPUTED"))
+      ) {
+        const { settleAssignmentSale } = await import(
+          "../inventory-assignments/inventory-assignment.service"
+        );
+        await settleAssignmentSale(order, now);
+      }
+
       // Set status, corresponding timestamp, and user tracking
       order.status = newStatus;
 
@@ -954,10 +1042,9 @@ export const updateOrder = async (
       }
     }
 
-    // Apply adjustments to Inventory / barman assignment stock
     const {
-      decrementAssignmentRemaining,
-      incrementAssignmentRemaining,
+      reserveAssignmentRemaining,
+      releaseAssignmentReservation,
     } = await import(
       "../inventory-assignments/inventory-assignment.service"
     );
@@ -972,9 +1059,9 @@ export const updateOrder = async (
 
       if (inv?.isBarman) {
         if (delta > 0) {
-          await decrementAssignmentRemaining(itemId, delta);
+          await reserveAssignmentRemaining(itemId, delta);
         } else {
-          await incrementAssignmentRemaining(itemId, -delta);
+          await releaseAssignmentReservation(itemId, -delta);
         }
       } else {
         await Inventory.findByIdAndUpdate(itemId, {
@@ -1255,6 +1342,8 @@ export const cancelOrder = async (
       message: "Order can only be cancelled when status is OPEN",
     };
   }
+
+  await releaseBarmanReservationsForOrder(order);
 
   // Set status to VOIDED, cancelledAt timestamp, and cancelledBy user
   order.status = "VOIDED";

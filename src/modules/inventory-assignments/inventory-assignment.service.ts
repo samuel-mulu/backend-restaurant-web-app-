@@ -1,6 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import { Inventory } from "../inventory/inventory.model";
 import { User } from "../auth/user.model";
+import { BarmanStockSale } from "./barman-stock-sale.model";
 import {
   InventoryAssignment,
   InventoryAssignmentDoc,
@@ -305,26 +306,452 @@ export const decrementAssignmentRemaining = async (
   }
 };
 
+const getAvailableOnAssignment = (assignment: {
+  remainingQuantity: number;
+  committedQuantity?: number;
+}) =>
+  Math.max(
+    0,
+    assignment.remainingQuantity - (assignment.committedQuantity || 0)
+  );
+
+const findApprovedAssignmentsFifo = (
+  inventoryId: string,
+  session?: mongoose.ClientSession
+) =>
+  InventoryAssignment.find({
+    inventoryId: new Types.ObjectId(inventoryId),
+    status: "approved",
+  })
+    .sort({ approvedAt: 1, createdAt: 1 })
+    .session(session || null);
+
 export const getApprovedRemaining = async (
   inventoryId: string
 ): Promise<number> => {
   validateObjectId(inventoryId, "Invalid inventory ID");
-  const result = await InventoryAssignment.aggregate([
+  const assignments = await findApprovedAssignmentsFifo(inventoryId);
+  return assignments.reduce(
+    (sum, assignment) => sum + getAvailableOnAssignment(assignment),
+    0
+  );
+};
+
+export const reserveAssignmentRemaining = async (
+  inventoryId: string,
+  qty: number,
+  session?: mongoose.ClientSession
+): Promise<void> => {
+  validateObjectId(inventoryId, "Invalid inventory ID");
+  if (qty <= 0) return;
+
+  const assignments = await findApprovedAssignmentsFifo(inventoryId, session);
+  const totalAvailable = assignments.reduce(
+    (sum, assignment) => sum + getAvailableOnAssignment(assignment),
+    0
+  );
+
+  if (totalAvailable < qty) {
+    throw {
+      status: 400,
+      message: `Insufficient approved barman quantity. Available: ${totalAvailable}, Requested: ${qty}`,
+    };
+  }
+
+  let left = qty;
+  for (const assignment of assignments) {
+    if (left <= 0) break;
+    const available = getAvailableOnAssignment(assignment);
+    if (available <= 0) continue;
+
+    const take = Math.min(available, left);
+    const updated = await InventoryAssignment.findOneAndUpdate(
+      {
+        _id: assignment._id,
+        remainingQuantity: { $gte: assignment.committedQuantity + take },
+      },
+      { $inc: { committedQuantity: take } },
+      { new: true, session }
+    );
+
+    if (!updated) {
+      throw {
+        status: 400,
+        message: "Concurrent update failed while reserving barman stock",
+      };
+    }
+    left -= take;
+  }
+
+  if (left > 0) {
+    throw {
+      status: 400,
+      message: "Insufficient approved barman quantity after concurrent updates",
+    };
+  }
+};
+
+export const releaseAssignmentReservation = async (
+  inventoryId: string,
+  qty: number,
+  session?: mongoose.ClientSession
+): Promise<void> => {
+  validateObjectId(inventoryId, "Invalid inventory ID");
+  if (qty <= 0) return;
+
+  const assignments = await InventoryAssignment.find({
+    inventoryId: new Types.ObjectId(inventoryId),
+    status: "approved",
+    committedQuantity: { $gt: 0 },
+  })
+    .sort({ approvedAt: -1, createdAt: -1 })
+    .session(session || null);
+
+  let left = qty;
+  for (const assignment of assignments) {
+    if (left <= 0) break;
+    const release = Math.min(assignment.committedQuantity, left);
+    const updated = await InventoryAssignment.findOneAndUpdate(
+      {
+        _id: assignment._id,
+        committedQuantity: { $gte: release },
+      },
+      { $inc: { committedQuantity: -release } },
+      { new: true, session }
+    );
+
+    if (!updated) {
+      throw {
+        status: 400,
+        message: "Concurrent update failed while releasing barman reservation",
+      };
+    }
+    left -= release;
+  }
+
+  if (left > 0) {
+    throw {
+      status: 400,
+      message: "Could not release full barman reservation amount",
+    };
+  }
+};
+
+export interface SettleOrderInput {
+  _id: Types.ObjectId;
+  items: Array<{
+    itemId: unknown;
+    itemModel?: string;
+    qty: number;
+  }>;
+}
+
+export const settleAssignmentSale = async (
+  order: SettleOrderInput,
+  soldAt: Date,
+  session?: mongoose.ClientSession
+): Promise<void> => {
+  const orderId = order._id;
+  const inventoryLines = new Map<string, number>();
+
+  for (const item of order.items) {
+    if (item.itemModel !== "Inventory") continue;
+    const rawItemId = item.itemId as
+      | Types.ObjectId
+      | { _id?: Types.ObjectId }
+      | string;
+    const itemId =
+      typeof rawItemId === "object" &&
+      rawItemId !== null &&
+      "_id" in rawItemId &&
+      rawItemId._id
+        ? rawItemId._id.toString()
+        : String(rawItemId);
+
+    const inventory = await Inventory.findById(itemId).session(session || null);
+    if (!inventory?.isBarman) continue;
+
+    inventoryLines.set(itemId, (inventoryLines.get(itemId) || 0) + item.qty);
+  }
+
+  for (const [inventoryId, qty] of inventoryLines) {
+    const existingSale = await BarmanStockSale.findOne({
+      orderId,
+      inventoryId: new Types.ObjectId(inventoryId),
+    }).session(session || null);
+
+    if (existingSale) continue;
+
+    const assignments = await findApprovedAssignmentsFifo(inventoryId, session);
+    let left = qty;
+
+    for (const assignment of assignments) {
+      if (left <= 0) break;
+
+      const settleQty = Math.min(left, assignment.remainingQuantity);
+      if (settleQty <= 0) continue;
+
+      const commitRelease = Math.min(
+        assignment.committedQuantity || 0,
+        settleQty
+      );
+
+      const updated = await InventoryAssignment.findOneAndUpdate(
+        {
+          _id: assignment._id,
+          remainingQuantity: { $gte: settleQty },
+          committedQuantity: { $gte: commitRelease },
+        },
+        {
+          $inc: {
+            committedQuantity: -commitRelease,
+            remainingQuantity: -settleQty,
+          },
+        },
+        { new: true, session }
+      );
+
+      if (!updated) {
+        throw {
+          status: 400,
+          message: "Concurrent update failed while settling barman sale",
+        };
+      }
+
+      await BarmanStockSale.create(
+        [
+          {
+            barmanId: assignment.barmanId,
+            inventoryId: new Types.ObjectId(inventoryId),
+            assignmentId: assignment._id,
+            orderId,
+            qty: settleQty,
+            soldAt,
+          },
+        ],
+        { session }
+      );
+
+      left -= settleQty;
+    }
+
+    if (left > 0) {
+      throw {
+        status: 400,
+        message: `Insufficient barman stock to settle sale. Remaining: ${left}`,
+      };
+    }
+  }
+};
+
+export interface DailySummaryFilters {
+  date: string;
+  barmanId?: string;
+  viewerRole?: string;
+  viewerId?: string;
+}
+
+export interface DailySummaryRow {
+  barmanId: string;
+  barmanName: string;
+  inventoryId: string;
+  inventoryName: string;
+  unit: string;
+  approved: number;
+  sold: number;
+  remaining: number;
+}
+
+const getDayBounds = (dateStr: string) => {
+  const start = new Date(`${dateStr}T00:00:00.000Z`);
+  const end = new Date(`${dateStr}T23:59:59.999Z`);
+  return { start, end };
+};
+
+const isSameUtcDay = (dateStr: string) => {
+  const today = new Date().toISOString().slice(0, 10);
+  return dateStr === today;
+};
+
+export const getDailySummary = async (
+  filters: DailySummaryFilters
+): Promise<{ date: string; items: DailySummaryRow[] }> => {
+  const { start, end } = getDayBounds(filters.date);
+
+  let barmanFilter: Types.ObjectId | undefined;
+  if (filters.viewerRole === "barman" && filters.viewerId) {
+    validateObjectId(filters.viewerId, "Invalid barman ID");
+    barmanFilter = new Types.ObjectId(filters.viewerId);
+  } else if (filters.barmanId) {
+    validateObjectId(filters.barmanId, "Invalid barman ID");
+    barmanFilter = new Types.ObjectId(filters.barmanId);
+  }
+
+  const barmanMatch = barmanFilter ? { barmanId: barmanFilter } : {};
+
+  const approvedAgg = await InventoryAssignment.aggregate([
     {
       $match: {
-        inventoryId: new Types.ObjectId(inventoryId),
         status: "approved",
-        remainingQuantity: { $gt: 0 },
+        approvedAt: { $gte: start, $lte: end },
+        ...barmanMatch,
       },
     },
     {
       $group: {
-        _id: null,
-        total: { $sum: "$remainingQuantity" },
+        _id: { barmanId: "$barmanId", inventoryId: "$inventoryId" },
+        approved: { $sum: "$approvedQuantity" },
       },
     },
   ]);
-  return result[0]?.total || 0;
+
+  const soldAgg = await BarmanStockSale.aggregate([
+    {
+      $match: {
+        soldAt: { $gte: start, $lte: end },
+        ...barmanMatch,
+      },
+    },
+    {
+      $group: {
+        _id: { barmanId: "$barmanId", inventoryId: "$inventoryId" },
+        sold: { $sum: "$qty" },
+      },
+    },
+  ]);
+
+  const rowKeys = new Map<
+    string,
+    { barmanId: Types.ObjectId; inventoryId: Types.ObjectId }
+  >();
+
+  for (const row of approvedAgg) {
+    const key = `${row._id.barmanId}_${row._id.inventoryId}`;
+    rowKeys.set(key, {
+      barmanId: row._id.barmanId,
+      inventoryId: row._id.inventoryId,
+    });
+  }
+  for (const row of soldAgg) {
+    const key = `${row._id.barmanId}_${row._id.inventoryId}`;
+    rowKeys.set(key, {
+      barmanId: row._id.barmanId,
+      inventoryId: row._id.inventoryId,
+    });
+  }
+
+  // Include rows with current remaining for today view
+  if (isSameUtcDay(filters.date)) {
+    const remainingAssignments = await InventoryAssignment.find({
+      status: "approved",
+      ...barmanMatch,
+    }).select("barmanId inventoryId");
+
+    for (const assignment of remainingAssignments) {
+      const key = `${assignment.barmanId}_${assignment.inventoryId}`;
+      rowKeys.set(key, {
+        barmanId: assignment.barmanId,
+        inventoryId: assignment.inventoryId,
+      });
+    }
+  }
+
+  const approvedMap = new Map(
+    approvedAgg.map((row) => [
+      `${row._id.barmanId}_${row._id.inventoryId}`,
+      row.approved,
+    ])
+  );
+  const soldMap = new Map(
+    soldAgg.map((row) => [
+      `${row._id.barmanId}_${row._id.inventoryId}`,
+      row.sold,
+    ])
+  );
+
+  const items: DailySummaryRow[] = [];
+
+  for (const [key, ids] of rowKeys) {
+    const [barman, inventory] = await Promise.all([
+      User.findById(ids.barmanId).select("name").lean(),
+      Inventory.findById(ids.inventoryId).select("name unit").lean(),
+    ]);
+
+    let remaining = 0;
+    if (isSameUtcDay(filters.date)) {
+      const remainingAgg = await InventoryAssignment.aggregate([
+        {
+          $match: {
+            status: "approved",
+            barmanId: ids.barmanId,
+            inventoryId: ids.inventoryId,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$remainingQuantity" },
+          },
+        },
+      ]);
+      remaining = remainingAgg[0]?.total || 0;
+    } else {
+      const approvedThrough = await InventoryAssignment.aggregate([
+        {
+          $match: {
+            status: "approved",
+            barmanId: ids.barmanId,
+            inventoryId: ids.inventoryId,
+            approvedAt: { $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$approvedQuantity" },
+          },
+        },
+      ]);
+      const soldThrough = await BarmanStockSale.aggregate([
+        {
+          $match: {
+            barmanId: ids.barmanId,
+            inventoryId: ids.inventoryId,
+            soldAt: { $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$qty" },
+          },
+        },
+      ]);
+      remaining = Math.max(
+        0,
+        (approvedThrough[0]?.total || 0) - (soldThrough[0]?.total || 0)
+      );
+    }
+
+    items.push({
+      barmanId: ids.barmanId.toString(),
+      barmanName: (barman as any)?.name || "Unknown",
+      inventoryId: ids.inventoryId.toString(),
+      inventoryName: (inventory as any)?.name || "Unknown",
+      unit: (inventory as any)?.unit || "",
+      approved: approvedMap.get(key) || 0,
+      sold: soldMap.get(key) || 0,
+      remaining,
+    });
+  }
+
+  items.sort((a, b) => {
+    const nameCmp = a.inventoryName.localeCompare(b.inventoryName);
+    if (nameCmp !== 0) return nameCmp;
+    return a.barmanName.localeCompare(b.barmanName);
+  });
+
+  return { date: filters.date, items };
 };
 
 /**

@@ -10,6 +10,11 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/", requireRole("owner", "cashier", "barman"), ctrl.list);
+router.get(
+  "/daily-summary",
+  requireRole("owner", "cashier", "barman"),
+  ctrl.dailySummary
+);
 router.patch(
   "/:id/approve",
   requireRole("barman"),

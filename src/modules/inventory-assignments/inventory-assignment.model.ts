@@ -10,6 +10,7 @@ export interface InventoryAssignmentDoc extends Document {
   assignedQuantity: number;
   approvedQuantity?: number;
   remainingQuantity: number;
+  committedQuantity: number;
   status: AssignmentStatus;
   approvedAt?: Date;
   rejectedAt?: Date;
@@ -47,6 +48,11 @@ const InventoryAssignmentSchema = new Schema<InventoryAssignmentDoc>(
       min: 0,
     },
     remainingQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    committedQuantity: {
       type: Number,
       default: 0,
       min: 0,

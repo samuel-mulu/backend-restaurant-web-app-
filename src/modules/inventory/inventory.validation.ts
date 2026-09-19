@@ -26,3 +26,11 @@ export const assignInventorySchema = Joi.object({
 export const approveAssignmentSchema = Joi.object({
   approvedQuantity: Joi.number().positive().required(),
 });
+
+export const dailySummaryQuerySchema = Joi.object({
+  date: Joi.string()
+    .pattern(/^\d{4}-\d{2}-\d{2}$/)
+    .required()
+    .messages({ "string.pattern.base": "date must be YYYY-MM-DD" }),
+  barmanId: Joi.string().optional(),
+});

@@ -3,6 +3,7 @@ import { validate } from "../../common/middleware/validate";
 import {
   approveAssignmentSchema,
   assignInventorySchema,
+  dailySummaryQuerySchema,
 } from "../inventory/inventory.validation";
 import * as assignmentService from "./inventory-assignment.service";
 
@@ -83,6 +84,32 @@ export const approve = [
     }
   },
 ];
+
+export const dailySummary = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { error, value } = dailySummaryQuerySchema.validate(req.query);
+    if (error) {
+      return send(res, 400, { message: error.details[0].message });
+    }
+
+    const user = req.user;
+    const data = await assignmentService.getDailySummary({
+      date: value.date,
+      barmanId: value.barmanId,
+      viewerRole: user?.role,
+      viewerId: user?._id || user?.id,
+    });
+
+    return send(res, 200, { data });
+  } catch (err: any) {
+    if (err.status) return send(res, err.status, { message: err.message });
+    next(err);
+  }
+};
 
 export const reject = async (
   req: Request,

@@ -7,7 +7,8 @@ const allowedOrigins = [
   env.corsOrigin,
   "https://frontend-restaurant-web-app.vercel.app",
   "https://menu-wheat-sigma.vercel.app",
-  "https://kandinos.vercel.app", // ✅ ADDED (your missing frontend)
+  "https://kandinos.vercel.app",
+  "https://kandino-s-menu.vercel.app",
   "https://lounge-restaurant.netlify.app",
 ]
   .filter((domain): domain is string => Boolean(domain))
