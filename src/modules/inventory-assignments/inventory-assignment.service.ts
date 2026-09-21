@@ -557,25 +557,66 @@ export interface DailySummaryRow {
   inventoryId: string;
   inventoryName: string;
   unit: string;
+  /** Approved quantity on the selected date */
   approved: number;
+  /** Sold quantity on the selected date */
   sold: number;
+  /**
+   * Current left from approved barman stock.
+   * Today: live remainingQuantity − committedQuantity.
+   * Past dates: approved-through-date − sold-through-date.
+   */
   remaining: number;
+  /** Qty reserved in open (unpaid) orders — only meaningful for today */
+  reserved: number;
 }
 
+export interface ApprovalByDateRow {
+  /** Civil YYYY-MM-DD in Africa/Addis_Ababa */
+  date: string;
+  approved: number;
+}
+
+export interface ApprovalHistoryRow {
+  id: string;
+  date: string;
+  barmanId: string;
+  barmanName: string;
+  inventoryId: string;
+  inventoryName: string;
+  unit: string;
+  approved: number;
+  assignedById: string;
+  assignedByName: string;
+}
+
+/** Ethiopia has no DST — always UTC+3 */
+const ADDIS_OFFSET = "+03:00";
+
 const getDayBounds = (dateStr: string) => {
-  const start = new Date(`${dateStr}T00:00:00.000Z`);
-  const end = new Date(`${dateStr}T23:59:59.999Z`);
+  const start = new Date(`${dateStr}T00:00:00.000${ADDIS_OFFSET}`);
+  const end = new Date(`${dateStr}T23:59:59.999${ADDIS_OFFSET}`);
   return { start, end };
 };
 
-const isSameUtcDay = (dateStr: string) => {
-  const today = new Date().toISOString().slice(0, 10);
-  return dateStr === today;
-};
+const getAddisToday = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Addis_Ababa",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+const isSameAddisDay = (dateStr: string) => dateStr === getAddisToday();
 
 export const getDailySummary = async (
   filters: DailySummaryFilters
-): Promise<{ date: string; items: DailySummaryRow[] }> => {
+): Promise<{
+  date: string;
+  items: DailySummaryRow[];
+  approvalsByDate: ApprovalByDateRow[];
+  approvalHistory: ApprovalHistoryRow[];
+}> => {
   const { start, end } = getDayBounds(filters.date);
 
   let barmanFilter: Types.ObjectId | undefined;
@@ -640,21 +681,102 @@ export const getDailySummary = async (
     });
   }
 
-  // Include rows with current remaining for today view
-  if (isSameUtcDay(filters.date)) {
-    const remainingAssignments = await InventoryAssignment.find({
-      status: "approved",
-      ...barmanMatch,
-    }).select("barmanId inventoryId");
+  // Always show approved barman stock for the selected date (not warehouse).
+  // Sold is date-specific; Current is live (today) or end-of-day (past).
+  // Include every barman+item that had been approved by end of this day —
+  // even if sold that day is 0 (do not hide rows when browsing previous dates).
+  const stockAssignments = await InventoryAssignment.find({
+    status: "approved",
+    approvedAt: { $lte: end },
+    ...barmanMatch,
+  }).select("barmanId inventoryId");
 
-    for (const assignment of remainingAssignments) {
-      const key = `${assignment.barmanId}_${assignment.inventoryId}`;
-      rowKeys.set(key, {
-        barmanId: assignment.barmanId,
-        inventoryId: assignment.inventoryId,
-      });
-    }
+  for (const assignment of stockAssignments) {
+    const key = `${assignment.barmanId}_${assignment.inventoryId}`;
+    rowKeys.set(key, {
+      barmanId: assignment.barmanId,
+      inventoryId: assignment.inventoryId,
+    });
   }
+
+  // All approval dates (Addis civil day) for the small approvals history table
+  const approvalsByDateAgg = await InventoryAssignment.aggregate([
+    {
+      $match: {
+        status: "approved",
+        approvedAt: { $exists: true, $ne: null },
+        ...barmanMatch,
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: "%Y-%m-%d",
+            date: "$approvedAt",
+            timezone: "Africa/Addis_Ababa",
+          },
+        },
+        approved: { $sum: "$approvedQuantity" },
+      },
+    },
+    { $sort: { _id: -1 } },
+  ]);
+
+  const approvalsByDate: ApprovalByDateRow[] = approvalsByDateAgg.map(
+    (row) => ({
+      date: row._id as string,
+      approved: row.approved as number,
+    })
+  );
+
+  // Full approval history rows (date + barman + item + cashier)
+  const approvedAssignments = await InventoryAssignment.find({
+    status: "approved",
+    approvedAt: { $exists: true, $ne: null },
+    ...barmanMatch,
+  })
+    .populate("inventoryId", "name unit")
+    .populate("barmanId", "name")
+    .populate("assignedBy", "name")
+    .sort({ approvedAt: -1 })
+    .lean();
+
+  const approvalHistory: ApprovalHistoryRow[] = approvedAssignments.map(
+    (doc: any) => {
+      const approvedAt = doc.approvedAt
+        ? new Date(doc.approvedAt)
+        : new Date();
+      const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Addis_Ababa",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(approvedAt);
+
+      return {
+        id: doc._id.toString(),
+        date,
+        barmanId:
+          doc.barmanId?._id?.toString?.() ||
+          doc.barmanId?.toString?.() ||
+          "",
+        barmanName: doc.barmanId?.name || "Unknown",
+        inventoryId:
+          doc.inventoryId?._id?.toString?.() ||
+          doc.inventoryId?.toString?.() ||
+          "",
+        inventoryName: doc.inventoryId?.name || "Unknown",
+        unit: doc.inventoryId?.unit || "",
+        approved: doc.approvedQuantity || 0,
+        assignedById:
+          doc.assignedBy?._id?.toString?.() ||
+          doc.assignedBy?.toString?.() ||
+          "",
+        assignedByName: doc.assignedBy?.name || "Unknown",
+      };
+    }
+  );
 
   const approvedMap = new Map(
     approvedAgg.map((row) => [
@@ -678,7 +800,8 @@ export const getDailySummary = async (
     ]);
 
     let remaining = 0;
-    if (isSameUtcDay(filters.date)) {
+    let reserved = 0;
+    if (isSameAddisDay(filters.date)) {
       const remainingAgg = await InventoryAssignment.aggregate([
         {
           $match: {
@@ -690,11 +813,17 @@ export const getDailySummary = async (
         {
           $group: {
             _id: null,
-            total: { $sum: "$remainingQuantity" },
+            remaining: { $sum: "$remainingQuantity" },
+            reserved: {
+              $sum: { $ifNull: ["$committedQuantity", 0] },
+            },
           },
         },
       ]);
-      remaining = remainingAgg[0]?.total || 0;
+      const liveRemaining = remainingAgg[0]?.remaining || 0;
+      reserved = remainingAgg[0]?.reserved || 0;
+      // Current left available to sell from approved stock
+      remaining = Math.max(0, liveRemaining - reserved);
     } else {
       const approvedThrough = await InventoryAssignment.aggregate([
         {
@@ -742,6 +871,7 @@ export const getDailySummary = async (
       approved: approvedMap.get(key) || 0,
       sold: soldMap.get(key) || 0,
       remaining,
+      reserved,
     });
   }
 
@@ -751,7 +881,7 @@ export const getDailySummary = async (
     return a.barmanName.localeCompare(b.barmanName);
   });
 
-  return { date: filters.date, items };
+  return { date: filters.date, items, approvalsByDate, approvalHistory };
 };
 
 /**
